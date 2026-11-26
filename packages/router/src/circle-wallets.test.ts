@@ -28,7 +28,7 @@ describe("CircleWalletsClient", () => {
 
   it("sends the API key as a bearer token and the user token only where given", async () => {
     const { client, calls } = fakeCircle([{ json: { data: { userToken: "ut", encryptionKey: "ek" } } }, { json: { data: { wallets: [] } } }]);
-    await client.createUserToken("u1");
+    await client.createUserToken("user-1");
     await client.listWallets("ut");
     expect(calls[0]!.headers.authorization).toBe("Bearer TEST_API_KEY:id:secret");
     expect(calls[0]!.headers["X-User-Token"]).toBeUndefined();
@@ -37,10 +37,17 @@ describe("CircleWalletsClient", () => {
 
   it("treats an existing user as success and any other error as an error", async () => {
     const existing = fakeCircle([{ status: 409, json: { code: USER_ALREADY_EXISTS, message: "exists" } }]);
-    await expect(existing.client.createUser("u1")).resolves.toBeUndefined();
+    await expect(existing.client.createUser("user-1")).resolves.toBeUndefined();
 
     const broken = fakeCircle([{ status: 401, json: { code: 401, message: "Invalid credentials." } }]);
-    await expect(broken.client.createUser("u1")).rejects.toThrow(CircleApiError);
+    await expect(broken.client.createUser("user-1")).rejects.toThrow(CircleApiError);
+  });
+
+  it("refuses a user id Circle would reject, before calling Circle", async () => {
+    const { client, calls } = fakeCircle([]);
+    await expect(client.createUser("x".repeat(51))).rejects.toThrow(/5 to 50 characters, got 51/);
+    await expect(client.createUser("abcd")).rejects.toThrow(/5 to 50 characters/);
+    expect(calls).toHaveLength(0);
   });
 
   it("asks for an EOA on the requested chains when initializing", async () => {

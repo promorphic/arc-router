@@ -2,7 +2,7 @@
  * The demo backend's flows, end to end over real HTTP, with Circle and the chains replaced by
  * fakes. Each test is one thing the customer does on the page.
  */
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -62,7 +62,10 @@ function deps(): ApiDeps {
     evidencePath: join(dir, "evidence.json"),
     now: () => new Date("2026-11-26T12:00:00Z"),
     circle: {
-      createUser: async () => {},
+      // Circle's own limit on user ids; a longer one gets "400: API parameter invalid".
+      createUser: async (userId: string) => {
+        if (userId.length < 5 || userId.length > 50) throw new CircleApiError(400, 2, "API parameter invalid");
+      },
       createUserToken: async () => ({ userToken: "ut", encryptionKey: "ek" }),
       initializeUser: async () => {
         if (world.initialized) throw new CircleApiError(409, USER_ALREADY_INITIALIZED, "already initialized");
@@ -149,7 +152,14 @@ describe("wallet creation", () => {
     const first = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).userId;
     await call("POST", "/api/session");
     expect(JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).userId).toBe(first);
-    expect(first).toMatch(/^promorphic-demo-/);
+    expect(first).toMatch(/^promorphic-[0-9a-f-]{36}$/);
+    expect(first.length).toBeLessThanOrEqual(50);
+  });
+
+  it("replaces a user id saved by an earlier build that Circle would reject", async () => {
+    writeFileSync(join(dir, "state.json"), JSON.stringify({ userId: `promorphic-demo-${"0".repeat(36)}` }));
+    expect((await call("POST", "/api/session")).status).toBe(200);
+    expect(JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).userId.length).toBeLessThanOrEqual(50);
   });
 
   it("refuses customer actions before the wallet exists", async () => {

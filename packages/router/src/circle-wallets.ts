@@ -103,6 +103,8 @@ export class CircleWalletsClient {
 
   /** Creates the end user. Idempotent: an existing user id is not an error. */
   async createUser(userId: string): Promise<void> {
+    // Circle answers a longer id with only "400: API parameter invalid", so say which parameter here.
+    if (userId.length < 5 || userId.length > 50) throw new Error(`Circle user id must be 5 to 50 characters, got ${userId.length}`);
     try {
       await this.call("POST", "/v1/w3s/users", { body: { userId } });
     } catch (err) {

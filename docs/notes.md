@@ -66,6 +66,7 @@ Dated notes on where Circle, Arc or Dinari behave differently from their documen
 ### Circle Wallets (user-controlled) on testnet
 
 - Create user, session token and the wallet-initialization challenge all work with `blockchains: ["ETH-SEPOLIA", "ARC-TESTNET"]` and `accountType: "EOA"`. Creating a user id that already exists returns code 155101; initializing an already-initialized user returns 155106.
+- A user id must be 5 to 50 characters. A longer one is answered with `400: API parameter invalid` and no field name; our first demo build used a 52-character id and failed there. The client now checks the length before calling Circle.
 - `GET /v1/w3s/config/entity` returns the App ID, so it does not have to be copied from the Console.
 - The contract-execution endpoint accepts raw `callData`, which lets us build calldata with the same code that the tests decode.
 - The web SDK `@circle-fin/w3s-pw-web-sdk` 1.1.11 does not run in a browser bundle as shipped: it imports Node built-ins (`buffer`, `stream`, `util`, `crypto`). With Vite it needs `vite-plugin-node-polyfills`.

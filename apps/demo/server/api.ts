@@ -115,8 +115,9 @@ export function createApi(deps: ApiDeps) {
 
   async function userToken(): Promise<{ userToken: string; encryptionKey: string }> {
     let { userId } = state();
-    if (!userId) {
-      userId = `promorphic-demo-${randomUUID()}`;
+    // Circle accepts user ids of 5 to 50 characters; an id saved by an earlier build may be longer.
+    if (!userId || userId.length > 50) {
+      userId = `promorphic-${randomUUID()}`;
       setState({ userId });
     }
     await deps.circle.createUser(userId);
