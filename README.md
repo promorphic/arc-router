@@ -1,0 +1,124 @@
+# arc-router
+
+The USDC settlement leg of [Promorphic](https://promorphic.xyz)'s router, on Arc.
+
+## What this is
+
+Promorphic is agentic, cross-chain trading and portfolio management for tokenized assets, for verified investors. Assets stay in the customer's own wallet on their home chain; the stablecoin leg of every subscription, redemption and order settles in USDC; an agent can act inside a human-set mandate (Manual → Copilot → Autopilot). Promorphic never holds or controls a customer asset. In this repository, Arc is where the USDC leg settles and where Dinari dShares trade; USYC is integrated on testnet only.
+
+## Status
+
+Read this first. It is kept current with every push, and nothing below it should contradict it.
+
+- **Live (mainnet):** nothing. No mainnet transaction has been sent from this repository.
+- **Testnet:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) is checked against the live testnets by `pnpm verify:chains`, 35 of 35 checks passing on 26 Nov 2026. The Gateway unified-balance read works against Circle's testnet API. No testnet transaction has been sent yet.
+- **Planned:** milestones M1 to M4 below. Evidence for each (transaction hash, explorer link, date, what it proves) is logged in [MILESTONES.md](MILESTONES.md) as it is produced.
+
+## Architecture: two legs
+
+Every flow has an asset leg and a USDC leg. The asset stays on the chain its issuer chose, in the customer's wallet. The USDC leg settles on Arc.
+
+```mermaid
+flowchart LR
+  subgraph customer["Customer holds every key"]
+    fund["Funding wallet<br/>any CCTP chain"]
+    arcw["Circle user-controlled wallet<br/>on Arc"]
+    homew["Wallet or custodian account<br/>on the asset's home chain"]
+  end
+
+  subgraph arc["USDC leg: Arc"]
+    cctp["CCTP V2<br/>burn, attest, mint"]
+    gw["Gateway<br/>unified USDC balance"]
+    agent["Circle Agent Wallet<br/>spend policy set by the customer"]
+    mandate["Mandate and Record contracts"]
+  end
+
+  subgraph home["Asset leg: issuer's chain"]
+    issuer["Issuer primary<br/>mint and redeem"]
+  end
+
+  fund -- "USDC" --> cctp --> arcw
+  gw -. "balance read" .-> arcw
+  arcw -- "funds, within limits" --> agent
+  mandate -- "checks each proposal" --> agent
+  agent -- "USDC pays for the order" --> issuer
+  issuer -- "tokens to the customer" --> homew
+```
+
+For Dinari dShares and USYC the issuer's chain is Arc itself, so both legs settle there.
+
+The mandate is enforced twice: by the Mandate contract (asset allowlist, per-order cap, rolling daily cap, expiry, revoke) and by the spend policy the customer sets on the Circle Agent Wallet. Promorphic holds neither key.
+
+## Circle products used, and where
+
+| Product | Role here | Status |
+|---|---|---|
+| CCTP V2 (Fast Transfer where the route offers it) | Moves the USDC leg from the customer's funding chain to Arc and back out to an issuer's chain. V1 is not used. | Constants verified on testnet; transfer in M1 |
+| Circle Wallets, user-controlled | The customer's operational wallet on Arc. User-controlled, not developer-controlled, because the keys must stay with the customer. | M1 |
+| Agent Wallets and spend policies | The agent's execution wallet. Circle enforces the transfer caps and allowlists the customer sets. | Wallet on testnet in M1; policies on mainnet in M3 (Circle applies policies to mainnet Agent Wallets only) |
+| Gateway | Unified USDC balance across chains, so an Arc-side action can be funded without a bridge step first. | Balance read working on testnet; funding flow in M1 |
+| Arc | Settlement chain for the USDC leg; home of the Mandate and Record contracts. | Testnet in M1, M3, M4; mainnet in M2 |
+| USYC (Entitlements and Teller) | USDC to USYC mint and redeem for eligible non-US institutions. **Testnet only in this repository.** Mainnet is enabled per customer. | M4 |
+
+## Milestones
+
+| # | Milestone | Completion test | Target | Status |
+|---|---|---|---|---|
+| M1 | **USDC settlement leg on Arc (testnet)** | (a) USDC moves from Ethereum Sepolia or Base Sepolia to Arc testnet via CCTP V2 and funds a Circle user-controlled wallet. (b) An Agent Wallet on Arc testnet executes a transfer inside the customer's limits, and a transfer outside the cap or the recipient allowlist is rejected, both with hashes. On testnet the limits are enforced by the Mandate contract; see the note below. (c) Gateway balance read in the router. | 31 Dec 2026 | ![in progress](https://img.shields.io/badge/status-in%20progress-blue) |
+| M2 | **First live trades on Arc mainnet** | (a) Dinari dShares bought and sold on Arc through the router by at least 3 KYB'd non-US customers, settled in USDC on Arc, tokens in the customers' own wallets. (b) At least one fill outside US market hours. (c) A public page showing notional, trade count, unique traders and the organic vs incentivised split. (d) Mandate and Record contracts verified on an Arc explorer. | 31 Jan 2027 | ![planned](https://img.shields.io/badge/status-planned-lightgrey) |
+| M3 | **Copilot inside a mandate** | (a) A customer sets a mandate (asset allowlist, per-order and daily caps, expiry). (b) The agent proposes a dShares rebalance and an idle-USDC action. (c) The human approves; the Agent Wallet executes within its spend policy. (d) A proposal that breaches the cap is blocked, with the hash. (e) An audit record export: who authorised what, when, under which mandate version. | 28 Feb 2027 | ![planned](https://img.shields.io/badge/status-planned-lightgrey) |
+| M4 | **USYC catalogue-ready on Arc testnet** | Allowlisted address on the USYC testnet Entitlements contract; USDC to USYC mint and USYC to USDC redeem through the Teller, with hashes; NAV and eligibility rule (non-US institutions, $100K minimum) shown in the catalogue; the M3 idle-USDC sweep can target it on testnet. | 28 Feb 2027 | ![planned](https://img.shields.io/badge/status-planned-lightgrey) |
+
+**Note on M1(b).** Circle's documentation states that Agent Wallet spending policies apply to mainnet wallets only and that testnet is not supported ([source](https://developers.circle.com/agent-stack/agent-wallets/wallet-operations/custom-policies), read 26 Nov 2026). So the testnet demonstration of "inside the limit succeeds, outside the limit is rejected" is enforced by the Mandate contract, and the Circle spend policy is added as the second layer on mainnet.
+
+## How to run
+
+Requires Node 20.18.2 or later, pnpm (via `corepack enable pnpm`), and Foundry for the contracts.
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm verify:chains
+```
+
+Read-only. Checks every constant in [`packages/router/src/chains.ts`](packages/router/src/chains.ts) against the live testnets and Circle's testnet APIs, and exits non-zero on any mismatch.
+
+```bash
+pnpm gateway:balance 0xYourAddress
+```
+
+Read-only. Prints the address's Gateway USDC balance on Arc testnet, Ethereum Sepolia and Base Sepolia, and the total.
+
+```bash
+pnpm test
+```
+
+Copy `.env.example` to `.env` for anything that signs. Use testnet keys and faucet funds only.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `packages/router` | Settlement and routing service: chain facts, CCTP V2, Gateway |
+| `packages/agent` | Mandate reader and Copilot proposer (M3) |
+| `contracts/` | Mandate and Record contracts, Foundry |
+| `apps/demo` | Minimal web UI for the milestone recordings |
+| `scripts/` | Evidence scripts that print hashes; chain-fact verification; secret scan |
+| `docs/notes.md` | Dated notes on where Circle, Arc and Dinari behave differently from their docs |
+
+## Ground rules for this code
+
+- **Non-custodial.** No code path gives a Promorphic-controlled key custody of customer USDC or tokens. The only keys in this repository's flows are test wallets, labelled as such, holding faucet funds.
+- **Testnet by default.** Nothing sends a mainnet transaction.
+- **No secrets in git.** `.env.example` only. `pnpm secrets:scan` runs before every push.
+- **CCTP V2 only.**
+
+## Team
+
+Founders of Catalysis, which shipped to Ethereum mainnet and was audited by Sigma Prime and Certora. Earlier at Obol, Offchain Labs and Nethermind.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
