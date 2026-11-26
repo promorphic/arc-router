@@ -34,3 +34,7 @@ recordings/
 .DS_Store
 .idea/
 .vscode/
+
+# local demo state (Circle test user id, wallet ids) and editor/agent config
+apps/demo/.demo-state.json
+.claude/

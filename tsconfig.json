@@ -10,7 +10,14 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["packages/*/src/**/*.ts", "scripts/**/*.ts"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "scripts/**/*.ts",
+    "apps/demo/server/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

@@ -2,7 +2,20 @@
   "name": "@promorphic/demo",
   "private": true,
   "version": "0.0.0",
-  "description": "Minimal web UI used to record the milestone demos. Not implemented yet.",
+  "description": "Minimal web UI used to record the milestone demos. Local only, testnet only.",
   "license": "MIT",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/main.ts"
+  },
+  "dependencies": {
+    "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
+    "@promorphic/router": "workspace:*",
+    "viem": "^2.58.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "vite": "^8.3.8",
+    "vite-plugin-node-polyfills": "^0.28.0"
+  }
 }

@@ -10,14 +10,21 @@
     "node": ">=20.18.2"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/demo/tsconfig.json --noEmit",
     "test": "vitest run",
     "verify:chains": "tsx scripts/verify-chain-facts.ts",
     "gateway:balance": "tsx scripts/gateway-balance.ts",
     "secrets:scan": "bash scripts/secret-scan.sh",
-    "m1:evidence": "tsx --env-file-if-exists=.env scripts/m1-evidence.ts"
+    "m1:evidence": "tsx --env-file-if-exists=.env scripts/m1-evidence.ts",
+    "demo": "pnpm --filter @promorphic/demo dev",
+    "test:live": "RUN_LIVE=1 vitest run tests/live --testTimeout 60000",
+    "test:e2e": "RUN_E2E=1 vitest run tests/e2e --testTimeout 180000 --hookTimeout 180000",
+    "test:contracts": "cd contracts && forge test",
+    "test:all": "pnpm typecheck && pnpm test && pnpm test:contracts && pnpm verify:chains && pnpm test:live && pnpm test:e2e",
+    "record": "tsx scripts/record.ts"
   },
   "devDependencies": {
+    "@circle-fin/cli": "^1.4.0",
     "@types/node": "^22.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
