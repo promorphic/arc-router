@@ -11,7 +11,7 @@ Promorphic is agentic, cross-chain trading and portfolio management for tokenize
 Read this first. It is kept current with every push, and nothing below it should contradict it.
 
 - **Live (mainnet):** nothing. No mainnet transaction has been sent from this repository.
-- **Testnet:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) is checked against the live testnets by `pnpm verify:chains`, 35 of 35 checks passing on 26 Nov 2026. The Gateway unified-balance read works against Circle's testnet API. No testnet transaction has been sent yet.
+- **Testnet:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) is checked against the live testnets by `pnpm verify:chains`, 35 of 35 checks passing on 26 Nov 2026. The Gateway unified-balance read works against Circle's testnet API. The CCTP V2 transfer code and the Mandate contract are written and pass their tests locally (15 unit tests, 20 Foundry tests); the transfer has not been run and the contract is not deployed. No testnet transaction has been sent yet.
 - **Planned:** milestones M1 to M4 below. Evidence for each (transaction hash, explorer link, date, what it proves) is logged in [MILESTONES.md](MILESTONES.md) as it is produced.
 
 ## Architecture: two legs
@@ -30,7 +30,7 @@ flowchart LR
     cctp["CCTP V2<br/>burn, attest, mint"]
     gw["Gateway<br/>unified USDC balance"]
     agent["Circle Agent Wallet<br/>spend policy set by the customer"]
-    mandate["Mandate and Record contracts"]
+    mandate["Mandate contract<br/>its event log is the record"]
   end
 
   subgraph home["Asset leg: issuer's chain"]
@@ -47,7 +47,7 @@ flowchart LR
 
 For Dinari dShares and USYC the issuer's chain is Arc itself, so both legs settle there.
 
-The mandate is enforced twice: by the Mandate contract (asset allowlist, per-order cap, rolling daily cap, expiry, revoke) and by the spend policy the customer sets on the Circle Agent Wallet. Promorphic holds neither key.
+The mandate is enforced twice: by the Mandate contract (asset and recipient allowlists, per-order cap, rolling daily cap, expiry, revoke) and by the spend policy the customer sets on the Circle Agent Wallet. Promorphic holds neither key. The design is in [docs/mandate.md](docs/mandate.md).
 
 ## Circle products used, and where
 
@@ -57,7 +57,7 @@ The mandate is enforced twice: by the Mandate contract (asset allowlist, per-ord
 | Circle Wallets, user-controlled | The customer's operational wallet on Arc. User-controlled, not developer-controlled, because the keys must stay with the customer. | M1 |
 | Agent Wallets and spend policies | The agent's execution wallet. Circle enforces the transfer caps and allowlists the customer sets. | Wallet on testnet in M1; policies on mainnet in M3 (Circle applies policies to mainnet Agent Wallets only) |
 | Gateway | Unified USDC balance across chains, so an Arc-side action can be funded without a bridge step first. | Balance read working on testnet; funding flow in M1 |
-| Arc | Settlement chain for the USDC leg; home of the Mandate and Record contracts. | Testnet in M1, M3, M4; mainnet in M2 |
+| Arc | Settlement chain for the USDC leg; home of the Mandate contract. | Testnet in M1, M3, M4; mainnet in M2 |
 | USYC (Entitlements and Teller) | USDC to USYC mint and redeem for eligible non-US institutions. **Testnet only in this repository.** Mainnet is enabled per customer. | M4 |
 
 ## Milestones
@@ -65,7 +65,7 @@ The mandate is enforced twice: by the Mandate contract (asset allowlist, per-ord
 | # | Milestone | Completion test | Target | Status |
 |---|---|---|---|---|
 | M1 | **USDC settlement leg on Arc (testnet)** | (a) USDC moves from Ethereum Sepolia or Base Sepolia to Arc testnet via CCTP V2 and funds a Circle user-controlled wallet. (b) An Agent Wallet on Arc testnet executes a transfer inside the customer's limits, and a transfer outside the cap or the recipient allowlist is rejected, both with hashes. On testnet the limits are enforced by the Mandate contract; see the note below. (c) Gateway balance read in the router. | 31 Dec 2026 | ![in progress](https://img.shields.io/badge/status-in%20progress-blue) |
-| M2 | **First live trades on Arc mainnet** | (a) Dinari dShares bought and sold on Arc through the router by at least 3 KYB'd non-US customers, settled in USDC on Arc, tokens in the customers' own wallets. (b) At least one fill outside US market hours. (c) A public page showing notional, trade count, unique traders and the organic vs incentivised split. (d) Mandate and Record contracts verified on an Arc explorer. | 31 Jan 2027 | ![planned](https://img.shields.io/badge/status-planned-lightgrey) |
+| M2 | **First live trades on Arc mainnet** | (a) Dinari dShares bought and sold on Arc through the router by at least 3 KYB'd non-US customers, settled in USDC on Arc, tokens in the customers' own wallets. (b) At least one fill outside US market hours. (c) A public page showing notional, trade count, unique traders and the organic vs incentivised split. (d) The Mandate contract, whose event log is the record, verified on an Arc explorer. | 31 Jan 2027 | ![planned](https://img.shields.io/badge/status-planned-lightgrey) |
 | M3 | **Copilot inside a mandate** | (a) A customer sets a mandate (asset allowlist, per-order and daily caps, expiry). (b) The agent proposes a dShares rebalance and an idle-USDC action. (c) The human approves; the Agent Wallet executes within its spend policy. (d) A proposal that breaches the cap is blocked, with the hash. (e) An audit record export: who authorised what, when, under which mandate version. | 28 Feb 2027 | ![planned](https://img.shields.io/badge/status-planned-lightgrey) |
 | M4 | **USYC catalogue-ready on Arc testnet** | Allowlisted address on the USYC testnet Entitlements contract; USDC to USYC mint and USYC to USDC redeem through the Teller, with hashes; NAV and eligibility rule (non-US institutions, $100K minimum) shown in the catalogue; the M3 idle-USDC sweep can target it on testnet. | 28 Feb 2027 | ![planned](https://img.shields.io/badge/status-planned-lightgrey) |
 
@@ -95,6 +95,16 @@ Read-only. Prints the address's Gateway USDC balance on Arc testnet, Ethereum Se
 pnpm test
 ```
 
+```bash
+cd contracts && forge test
+```
+
+```bash
+pnpm m1:evidence
+```
+
+Sends testnet transactions: the CCTP V2 transfer into Arc testnet, then the Gateway balance read, and prints an evidence block. Needs `.env` filled in, and refuses to run if an RPC answers with a chain id that is not one of the three testnets.
+
 Copy `.env.example` to `.env` for anything that signs. Use testnet keys and faucet funds only.
 
 ## Layout
@@ -103,9 +113,10 @@ Copy `.env.example` to `.env` for anything that signs. Use testnet keys and fauc
 |---|---|
 | `packages/router` | Settlement and routing service: chain facts, CCTP V2, Gateway |
 | `packages/agent` | Mandate reader and Copilot proposer (M3) |
-| `contracts/` | Mandate and Record contracts, Foundry |
+| `contracts/` | Mandate contract (its event log is the record), Foundry |
 | `apps/demo` | Minimal web UI for the milestone recordings |
 | `scripts/` | Evidence scripts that print hashes; chain-fact verification; secret scan |
+| `docs/mandate.md` | Why the mandate is enforced twice |
 | `docs/notes.md` | Dated notes on where Circle, Arc and Dinari behave differently from their docs |
 
 ## Ground rules for this code

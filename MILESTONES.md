@@ -16,10 +16,10 @@ No transaction has been sent yet, on any network.
 
 | Item | Status | Evidence |
 |---|---|---|
-| 1a. CCTP V2 transfer, Sepolia to Arc testnet, into a Circle user-controlled wallet | Not started | |
-| 1b. Agent Wallet on Arc testnet; transfer inside the limits succeeds, outside is rejected (limits enforced by the Mandate contract on testnet) | Not started | |
+| 1a. CCTP V2 transfer, Sepolia to Arc testnet, into a Circle user-controlled wallet | Code written and unit-tested (`packages/router/src/cctp.ts`); not run yet. Waiting on faucet funds for the test wallet and on the user-controlled wallet. | |
+| 1b. Agent Wallet on Arc testnet; transfer inside the limits succeeds, outside is rejected (limits enforced by the Mandate contract on testnet) | Mandate contract written, 20 Foundry tests passing locally including the cap breach; not deployed. Agent Wallet not created yet. | |
 | 1c. Gateway unified balance read in the router; Arc-side action funded from it | Read implemented; demo wallet evidence pending | |
-| `scripts/m1-evidence.ts` end-to-end re-run | Not started | |
+| `scripts/m1-evidence.ts` end-to-end re-run | Written for 1a and 1c; not run yet. 1b not covered yet. | |
 | Screen recording of 1a and 1b | Not started | |
 
 ## M2: Dinari dShares on Arc
