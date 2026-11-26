@@ -14,7 +14,8 @@
     "test": "vitest run",
     "verify:chains": "tsx scripts/verify-chain-facts.ts",
     "gateway:balance": "tsx scripts/gateway-balance.ts",
-    "secrets:scan": "bash scripts/secret-scan.sh"
+    "secrets:scan": "bash scripts/secret-scan.sh",
+    "m1:evidence": "tsx --env-file-if-exists=.env scripts/m1-evidence.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
