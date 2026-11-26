@@ -4,6 +4,70 @@ Dated notes on where Circle, Arc or Dinari behave differently from their documen
 
 ## 26 Nov 2026
 
+### Dinari API (read for M2; no key, no account, no call made yet)
+
+Every Dinari docs page is available as Markdown at `https://docs.dinari.com/<path>.md`; the index is https://docs.dinari.com/llms.txt. Reference pages embed the OpenAPI schema for their endpoint. The M2 design built on these facts is in [m2-plan.md](m2-plan.md).
+
+**Arc is in Dinari's API schema but not in its list of supported chains.**
+
+- The supported-chains page, updated 26 Nov 2026, lists Ethereum, Arbitrum One, Avalanche C-Chain, Base, HyperEVM, HyperCore, Plume and Tempo. Arc is not on it.
+  Source: https://docs.dinari.com/docs/blockchain
+- The API reference's `ChainId` enum includes `eip155:5042` (Arc mainnet) and `eip155:5042002` (Arc testnet), on the wallet-connection, faucet, order-permit, order, cash and portfolio endpoints.
+  Source: for example https://docs.dinari.com/reference/createeip155orderrequestpermit and https://docs.dinari.com/reference/createaccountfaucet
+- Could not confirm from public pages: whether any dShare is live on Arc, which ones, or what the payment token is there. The answer is the `tokens` array of `GET /market_data/stocks/`, which needs a key. Arc's own docs have not been checked for Dinari yet.
+
+**Environments and auth**
+
+- Sandbox: `https://api-enterprise.sandbox.dinari.com/api/v2`. Live: `https://api-enterprise.sbt.dinari.com/api/v2`. Not yet cross-checked against the SDK's own constants.
+  Source: https://docs.dinari.com/reference/environments (page dated 29 Sep 2025)
+- Every endpoint takes two headers, `X-API-Key-Id` and `X-API-Secret-Key`. The docs name the variables `DINARI_API_KEY_ID` and `DINARI_API_SECRET_KEY`.
+- A sandbox key is created in the partner dashboard after sign-up.
+  Source: https://docs.dinari.com/docs/quickstart
+- The TypeScript SDK `@dinari/api-sdk` defaults to production unless told otherwise.
+  Source: https://docs.dinari.com/docs/entity-management
+
+**Onboarding**
+
+- An Entity (individual or organisation, with `is_kyc_complete`) goes through KYC, then gets an Account (`jurisdiction` is `BASELINE` or `US`), then a Wallet.
+- Dinari can host KYC: `POST /entities/{id}/kyc/url` returns an `embed_url`. Submitting KYC data directly is open to everyone in the sandbox.
+  Source: https://docs.dinari.com/reference/createmanagedentitykycembed
+- A self-custody wallet is linked by signing a nonce message (`GET /accounts/{id}/wallet/external/nonce`, then `POST /accounts/{id}/wallet/external`).
+  Source: https://docs.dinari.com/docs/managing-wallets
+- Dinari-managed wallets exist only for the partner organisation's own accounts. M2 does not use them, because that would put customer positions in an account the partner controls.
+
+**Orders**
+
+- Order model: an `OrderRequest` is submitted on-chain and becomes an `Order`, which has one or more `OrderFulfillment`s.
+- Self-custody path: create an EIP-155 permit, have the customer sign it, then either Dinari submits it or the customer submits the transaction.
+  Sources: https://docs.dinari.com/docs/order-type and https://docs.dinari.com/reference/createeip155orderrequestpermit
+- Types `MARKET` and `LIMIT` (no stop orders); sides `BUY` and `SELL`; time in force `DAY` (the default), `GTC` (up to 90 days), `IOC` and `FOK`.
+- Precision: a market buy takes a USD amount with at most 2 decimals; a market sell takes a quantity with at most 6; a limit order takes a quantity with at most 4 decimals and a price with at most 2.
+- Sessions, in Eastern time:
+  - Regular: 09:30 to 16:00.
+  - Extended: 04:00 to 09:30 and 16:00 to 20:00.
+  - Overnight: 20:00 the previous day to 04:00, from Sunday 20:00, and only if the next day trades.
+  - Open (24/7): Friday 20:00 to Sunday 20:00 and whenever the other sessions are closed. On-chain only, for a short list of tickers (SPY, QQQ, AAPL, AMZN, META, MSTR, NVDA, SPCX, TSLA on 26 Nov 2026).
+  - Sources: https://docs.dinari.com/docs/trading-hours and https://docs.dinari.com/docs/24-7-trading
+- A market order outside the Regular session is not rejected. Dinari converts it to a marketable limit at the latest ASK (buys) or BID (sells); it may fill fully, partly or not at all, and the remainder is refunded. Market buys of non-fractionable stocks are converted the same way in every session.
+- The current session comes from `GET /market_data/market_hours/`.
+- An order's own quantities are what was requested, not what filled. Actual amounts are in `GET /accounts/{id}/orders/{order_id}/fulfillments`, summed over every fulfillment.
+  Source: https://docs.dinari.com/docs/order-fulfillment-amounts-in-the-orders-api
+- An order cannot be cancelled in `PENDING_FILL`, `PENDING_ESCROW`, `FILLED`, `REJECTED` or `CANCELLED`. A cancellation is not guaranteed.
+
+**Funding and income**
+
+- The sandbox faucet (`POST /accounts/{id}/faucet`) mints 1,000 **mockUSD**, not USDC.
+- In production, accounts are funded with USD+, USDC or USDT, and "availability varies by chain".
+  Sources: https://docs.dinari.com/reference/createaccountfaucet and https://docs.dinari.com/docs/funding-accounts-through-wallets
+- Dividends: `GET /accounts/{id}/dividend_payments` returns `amount` and `currency`. Whether a dividend on Arc is paid in USDC has not been confirmed.
+
+**Errors and restrictions**
+
+- Errors carry `status`, `message`, `error_id` and `error`; a 422 also carries `field_errors`.
+- Unsupported countries and sectors are listed at https://docs.dinari.com/docs/restrictions.
+
+**Not yet read:** the rest of the placing-orders guide (the exact permit typed data, gas, fee quoting), KYC for organisations (KYB), partner fees, dividend handling in detail, and the SDK reference.
+
 ### Agent Wallet spending policies are mainnet-only
 
 - The spending-policy how-to says: "Policies apply to mainnet agent wallets only" and "Spending policies require a mainnet agent wallet. Testnet is not supported." The quickstart repeats it: "Spending policies aren't available on testnet."

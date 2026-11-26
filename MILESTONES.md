@@ -48,7 +48,13 @@ Reading the Agent Wallet rows on the explorer: the Agent Wallet is a smart accou
 
 ## M2: Dinari dShares on Arc
 
-Not started. Sandbox only until an explicit mainnet go.
+Planned, not built. Sandbox only until an explicit mainnet go.
+
+| Item | Status | Where |
+|---|---|---|
+| Dinari API read: environments, auth, onboarding, the order model, sessions, fulfillments, funding | Done 26 Nov 2026, from the public docs; no key, no account, no call | [`docs/notes.md`](docs/notes.md), "Dinari API" |
+| Which dShares are on Arc | Not confirmed. Dinari's supported-chains page does not list Arc; its API schema accepts Arc's chain ids. Needs a sandbox key or Dinari's answer | [`docs/notes.md`](docs/notes.md) |
+| Dinari client (sandbox only, mock auth), the issuer-primary leg, the volume page and indexer stub, tests | Designed, not started | [`docs/m2-plan.md`](docs/m2-plan.md) |
 
 ## M3: Copilot inside a mandate
 

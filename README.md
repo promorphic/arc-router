@@ -4,7 +4,7 @@ The USDC settlement leg of [Promorphic](https://promorphic.xyz)'s router, on Arc
 
 ## What this is
 
-Promorphic is agentic, cross-chain trading and portfolio management for tokenized assets, for verified investors. Assets stay in the customer's own wallet on their home chain; the stablecoin leg of every subscription, redemption and order settles in USDC; an agent can act inside a human-set mandate (Manual → Copilot → Autopilot). Promorphic never holds or controls a customer asset. In this repository, Arc is where the USDC leg settles and where Dinari dShares trade; USYC is integrated on testnet only.
+Promorphic is agentic, cross-chain trading and portfolio management for tokenized assets, for verified investors. Assets stay in the customer's own wallet on their home chain; the stablecoin leg of every subscription, redemption and order settles in USDC; an agent can act inside a human-set mandate (Manual → Copilot → Autopilot). Promorphic never holds or controls a customer asset. In this repository, Arc is where the USDC leg settles. Dinari dShares on Arc are planned for M2, and whether they are available on Arc today is not yet confirmed (see [docs/notes.md](docs/notes.md)). USYC is integrated on testnet only.
 
 ## Status
 
@@ -18,6 +18,7 @@ Read this first. It is kept current with every push, and nothing below it should
   - A live end-to-end run with test keys also shows over-daily-cap, unapproved (Copilot) and post-revoke proposals being rejected on-chain.
   - Hashes are in [MILESTONES.md](MILESTONES.md); audit record exports are in [`evidence/`](evidence/).
 - **Checked:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) against the live testnets by `pnpm verify:chains`, 35 of 35 on 26 Nov 2026.
+- **Not built yet:** M2 (Dinari dShares). Dinari's public API docs have been read and the design is written in [docs/m2-plan.md](docs/m2-plan.md). There is no Dinari code, key or account, and no order has been placed with Dinari, in its sandbox or anywhere else.
 - **Planned:** milestones M1 to M4 below. Evidence for each (transaction hash, explorer link, date, what it proves) is logged in [MILESTONES.md](MILESTONES.md) as it is produced.
 
 ## Architecture: two legs
@@ -51,7 +52,7 @@ flowchart LR
   issuer -- "tokens to the customer" --> homew
 ```
 
-For Dinari dShares and USYC the issuer's chain is Arc itself, so both legs settle there.
+For USYC the issuer's chain is Arc itself, so both legs settle there. The same is planned for Dinari dShares, once Dinari confirms they are available on Arc.
 
 The mandate is enforced twice: by the Mandate contract (asset and recipient allowlists, per-order cap, rolling daily cap, expiry, revoke) and by the spend policy the customer sets on the Circle Agent Wallet. Promorphic holds neither key. The design is in [docs/mandate.md](docs/mandate.md).
 
@@ -155,6 +156,7 @@ Copy `.env.example` to `.env` for anything that signs. Use testnet keys and fauc
 | `evidence/` | Evidence files produced by the runs, referenced from `MILESTONES.md` |
 | `docs/mandate.md` | Why the mandate is enforced twice |
 | `docs/notes.md` | Dated notes on where Circle, Arc and Dinari behave differently from their docs |
+| `docs/m2-plan.md` | Design for M2: the Dinari sandbox client, the issuer-primary leg and the volume page (not built yet) |
 
 ## Ground rules for this code
 
