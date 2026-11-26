@@ -24,6 +24,8 @@ export interface TestnetChain {
   circleBlockchain: "ARC-TESTNET" | "ETH-SEPOLIA" | "BASE-SEPOLIA";
   rpcUrlEnv: string;
   defaultRpcUrl: string;
+  /** Other public endpoints for the same network, tried when the default one rate-limits. */
+  fallbackRpcUrls?: string[];
   explorerUrl: string;
   /** USDC ERC-20 interface, 6 decimals. */
   usdc: Address;
@@ -49,6 +51,9 @@ export const ARC_TESTNET: TestnetChain = {
   circleBlockchain: "ARC-TESTNET",
   rpcUrlEnv: "ARC_TESTNET_RPC_URL",
   defaultRpcUrl: "https://rpc.testnet.arc.io",
+  // Listed on https://docs.arc.io/arc/references/rpc-endpoints. The Blockdaemon endpoint listed
+  // there did not answer plain JSON-RPC without credentials when checked, so it is left out.
+  fallbackRpcUrls: ["https://rpc.drpc.testnet.arc.io", "https://rpc.quicknode.testnet.arc.io"],
   explorerUrl: "https://explorer.testnet.arc.io",
   usdc: "0x3600000000000000000000000000000000000000",
 };

@@ -29,7 +29,7 @@ import {
   explorerTxUrl,
   mint,
   readUnifiedBalance,
-  rpcUrl,
+  transportFor,
   usdcToBaseUnits,
   viemChain,
   waitForAttestation,
@@ -60,16 +60,16 @@ const recipient = requireEnv("ARC_USER_WALLET_ADDRESS") as Address;
 
 // Guard: every RPC we are about to sign for must be one of the known testnets.
 for (const chain of [source, destination]) {
-  const id = await createPublicClient({ transport: http(rpcUrl(chain)) }).getChainId();
+  const id = await createPublicClient({ transport: transportFor(chain) }).getChainId();
   if (id !== chain.chainId || !TESTNET_CHAINS.some((c) => c.chainId === id)) {
     console.error(`refusing to run: ${chain.rpcUrlEnv} answers chain id ${id}, expected testnet ${chain.chainId}`);
     process.exit(1);
   }
 }
 
-const sourceWallet = createWalletClient({ account, chain: viemChain(source), transport: http(rpcUrl(source)) });
-const arcWallet = createWalletClient({ account, chain: viemChain(destination), transport: http(rpcUrl(destination)) });
-const arcClient = createPublicClient({ transport: http(rpcUrl(destination)) });
+const sourceWallet = createWalletClient({ account, chain: viemChain(source), transport: transportFor(source) });
+const arcWallet = createWalletClient({ account, chain: viemChain(destination), transport: transportFor(destination) });
+const arcClient = createPublicClient({ transport: transportFor(destination) });
 const balanceOnArc = (who: Address) =>
   arcClient.readContract({ address: destination.usdc, abi: erc20Abi, functionName: "balanceOf", args: [who] });
 

@@ -17,7 +17,7 @@ import {
   IRIS_SANDBOX_URL,
   TESTNET_CHAINS,
   USYC_ARC_TESTNET,
-  rpcUrl,
+  transportFor,
   type Address,
 } from "@promorphic/router";
 
@@ -48,7 +48,7 @@ const hasCode = async (client: PublicClient, address: Address) =>
   ((await client.getCode({ address })) ?? "0x").length > 2 ? "deployed" : "no code";
 
 for (const chain of TESTNET_CHAINS) {
-  const client = createPublicClient({ transport: http(rpcUrl(chain)) });
+  const client = createPublicClient({ transport: transportFor(chain) });
   const n = chain.name;
   await attempt(`${n}: chain id`, chain.chainId, () => client.getChainId());
   await attempt(`${n}: CCTP domain (MessageTransmitterV2.localDomain)`, chain.cctpDomain, () =>
@@ -74,7 +74,7 @@ await attempt("Arc mainnet: chain id (read only)", ARC_MAINNET_CHAIN_ID, () =>
 
 // USYC on Arc testnet.
 {
-  const arc = createPublicClient({ transport: http(rpcUrl(ARC_TESTNET)) });
+  const arc = createPublicClient({ transport: transportFor(ARC_TESTNET) });
   await attempt("USYC: token symbol", "USYC", () =>
     arc.readContract({ address: USYC_ARC_TESTNET.token, abi, functionName: "symbol" }),
   );

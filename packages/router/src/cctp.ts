@@ -20,6 +20,7 @@ import {
   type WalletClient,
 } from "viem";
 import { CCTP_FINALITY, CCTP_V2_TESTNET, IRIS_SANDBOX_URL, rpcUrl, type Address, type TestnetChain } from "./chains.ts";
+import { transportFor } from "./rpc.ts";
 
 export const tokenMessengerV2Abi = parseAbi([
   "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold)",
@@ -117,7 +118,7 @@ export async function burn(params: {
 }): Promise<BurnResult> {
   const { wallet, source, destination, amount, recipient, fast } = params;
   const chain = viemChain(source);
-  const client = createPublicClient({ chain, transport: http(rpcUrl(source)) });
+  const client = createPublicClient({ chain, transport: transportFor(source) });
   const threshold = fast ? CCTP_FINALITY.fast : CCTP_FINALITY.standard;
   const fee = await fetchFee(source.cctpDomain, destination.cctpDomain, threshold, { fetchImpl: params.fetchImpl });
   const maxFee = maxFeeFor(amount, fee.minimumFeeBps);
@@ -207,7 +208,7 @@ export async function mint(params: {
 }): Promise<Hex> {
   const { wallet, destination, message, attestation } = params;
   const chain = viemChain(destination);
-  const client = createPublicClient({ chain, transport: http(rpcUrl(destination)) });
+  const client = createPublicClient({ chain, transport: transportFor(destination) });
   const hash = await wallet.writeContract({
     chain,
     account: wallet.account,
