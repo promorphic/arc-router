@@ -11,7 +11,9 @@ Promorphic is agentic, cross-chain trading and portfolio management for tokenize
 Read this first. It is kept current with every push, and nothing below it should contradict it.
 
 - **Live (mainnet):** nothing. No mainnet transaction has been sent from this repository.
-- **Testnet:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) is checked against the live testnets by `pnpm verify:chains`, 35 of 35 checks passing on 26 Nov 2026. The Gateway unified-balance read works against Circle's testnet API. The CCTP V2 transfer code and the Mandate contract are written and pass their tests locally (15 unit tests, 20 Foundry tests); the transfer has not been run and the contract is not deployed. No testnet transaction has been sent yet.
+- **Testnet, proven with hashes:** the Mandate contract is deployed on Arc testnet ([`0x2D1CBBEea337a30dF22C0446dB2528B98B543D10`](https://explorer.testnet.arc.io/address/0x2D1CBBEea337a30dF22C0446dB2528B98B543D10)). A live end-to-end run with test keys shows an in-limit payment executing and over-cap, wrong-recipient, over-daily-cap, unapproved and post-revoke proposals each being rejected on-chain. The audit record export of that run is in [`evidence/`](evidence/).
+- **Testnet, working but not yet run end to end:** the CCTP V2 transfer into a Circle user-controlled wallet and the Circle Agent Wallet acting through the mandate. The demo app, the server flow and Circle's testnet API calls are built and tested; the run needs the customer to set a PIN and log in to the Circle CLI. The Gateway unified-balance read works against Circle's testnet API.
+- **Checked:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) against the live testnets by `pnpm verify:chains`, 35 of 35 on 26 Nov 2026.
 - **Planned:** milestones M1 to M4 below. Evidence for each (transaction hash, explorer link, date, what it proves) is logged in [MILESTONES.md](MILESTONES.md) as it is produced.
 
 ## Architecture: two legs
@@ -91,13 +93,36 @@ pnpm gateway:balance 0xYourAddress
 
 Read-only. Prints the address's Gateway USDC balance on Arc testnet, Ethereum Sepolia and Base Sepolia, and the total.
 
-```bash
-pnpm test
-```
+### The demo
 
 ```bash
-cd contracts && forge test
+pnpm demo
 ```
+
+Serves the demo page on http://localhost:5180. The customer creates a Circle user-controlled wallet (setting a PIN in Circle's own frame), moves USDC to Arc with CCTP V2, and sets a mandate. The server prepares each transaction as a Circle challenge and cannot sign one. Needs `CIRCLE_API_KEY` (a testnet key; live keys are refused), `CIRCLE_APP_ID` and `TEST_SOURCE_PRIVATE_KEY` in `.env`.
+
+The agent is a Circle Agent Wallet. The customer creates it by logging in to the Circle CLI with their own email and one-time code:
+
+```bash
+pnpm exec circle wallet login you@example.com --testnet
+```
+
+### Tests
+
+| Command | What it covers | Network |
+|---|---|---|
+| `pnpm test` | Unit tests: chain facts helpers, CCTP fee and attestation logic, Gateway read, Circle Wallets client, mandate calldata, and every demo server flow over HTTP with Circle and the chains faked | none |
+| `pnpm test:contracts` | Foundry tests for the Mandate contract, including a fuzz test of the rolling daily cap | none |
+| `pnpm verify:chains` | Every hardcoded address, chain id and domain against the live testnets | read-only |
+| `pnpm test:live` | Fee API, Gateway, the deployed Mandate contract, Circle API key | read-only |
+| `pnpm test:e2e` | The full Mandate flow on Arc testnet with test keys: real transactions, a few cents of faucet USDC | sends testnet transactions |
+| `pnpm test:all` | All of the above | |
+
+```bash
+pnpm record 0xCustomerAddress --csv
+```
+
+Exports the audit record for a customer from the Mandate contract's event log, as JSON or CSV.
 
 ```bash
 pnpm m1:evidence
@@ -114,8 +139,10 @@ Copy `.env.example` to `.env` for anything that signs. Use testnet keys and fauc
 | `packages/router` | Settlement and routing service: chain facts, CCTP V2, Gateway |
 | `packages/agent` | Mandate reader and Copilot proposer (M3) |
 | `contracts/` | Mandate contract (its event log is the record), Foundry |
-| `apps/demo` | Minimal web UI for the milestone recordings |
-| `scripts/` | Evidence scripts that print hashes; chain-fact verification; secret scan |
+| `apps/demo` | Local demo page and server for the milestone recordings |
+| `scripts/` | Evidence scripts that print hashes; chain-fact verification; audit record export; secret scan |
+| `tests/` | Live read-only tests and the live end-to-end test |
+| `evidence/` | Evidence files produced by the runs, referenced from `MILESTONES.md` |
 | `docs/mandate.md` | Why the mandate is enforced twice |
 | `docs/notes.md` | Dated notes on where Circle, Arc and Dinari behave differently from their docs |
 

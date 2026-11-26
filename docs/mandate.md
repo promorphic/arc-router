@@ -45,4 +45,4 @@ Spend is counted in hourly buckets and the cap sums the current hour and the 24 
 
 - Sell-side actions, where the asset rather than USDC leaves the customer's wallet.
 - Actions that call an issuer contract on the customer's behalf (for example a USYC Teller deposit) rather than paying an allowlisted recipient.
-- Deployment. The contract is tested locally and is not deployed on any network yet.
+- Mainnet. The contract is deployed on Arc testnet only (`0x2D1CBBEea337a30dF22C0446dB2528B98B543D10`).

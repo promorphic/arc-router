@@ -46,6 +46,26 @@ Dated notes on where Circle, Arc or Dinari behave differently from their documen
 - V1 deprecation began 31 Oct 2026 and completes 1 Dec 2026. Nothing here uses V1.
   Source: https://developers.circle.com/cctp/migration-from-v1-to-v2
 
+### Arc testnet RPC
+
+- The public endpoint `https://rpc.testnet.arc.io` rate-limits quickly: a burst of a few dozen reads returns HTTP 429 "rate limit exceeded". The router uses a fallback transport over the endpoints Arc documents (`rpc.drpc.testnet.arc.io`, `rpc.quicknode.testnet.arc.io`). The Blockdaemon endpoint on the same docs page did not answer plain JSON-RPC without credentials.
+- `eth_getLogs` over a wide block range is refused ("requested range too large", code -32012). The record reader pages through 10,000-block windows from the contract's deploy block.
+- Blocks arrived roughly every 0.75 s when we measured, so a day is on the order of 115,000 blocks.
+- The faucet links to `testnet.arcscan.app`, which redirects to the documented explorer `explorer.testnet.arc.io`.
+- A contract deployment of about 1.18M gas cost about 0.024 USDC.
+
+### Circle Wallets (user-controlled) on testnet
+
+- Create user, session token and the wallet-initialization challenge all work with `blockchains: ["ETH-SEPOLIA", "ARC-TESTNET"]` and `accountType: "EOA"`. Creating a user id that already exists returns code 155101; initializing an already-initialized user returns 155106.
+- `GET /v1/w3s/config/entity` returns the App ID, so it does not have to be copied from the Console.
+- The contract-execution endpoint accepts raw `callData`, which lets us build calldata with the same code that the tests decode.
+- The web SDK `@circle-fin/w3s-pw-web-sdk` 1.1.11 does not run in a browser bundle as shipped: it imports Node built-ins (`buffer`, `stream`, `util`, `crypto`). With Vite it needs `vite-plugin-node-polyfills`.
+- The Console faucet funds Circle wallets by wallet ID (5 requests per 24 hours per team) and includes native gas; the public faucet at faucet.circle.com funds any address with USDC only and is reCAPTCHA-protected.
+
+### Circle CLI
+
+- `@circle-fin/cli` 1.4.0 refuses every wallet command until its terms are accepted. In our flow the customer accepts them at the interactive prompt and enters the emailed one-time code themselves.
+
 ### Tooling
 
 - pnpm 12 ships `bin/pnpm.mjs`; Corepack 0.33 looks for `bin/pnpm.cjs` and fails to launch it. `packageManager` is pinned to pnpm 10 for that reason.
