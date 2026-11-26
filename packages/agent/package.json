@@ -1,0 +1,11 @@
+{
+  "name": "@promorphic/agent",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Mandate reader and Copilot proposer (milestone M3). Not implemented yet.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -1,0 +1,36 @@
+# dependencies and build output
+node_modules/
+dist/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# secrets: nothing here is ever committed
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+keystore/
+*entity-secret*
+*entity_secret*
+*recovery*.dat
+recovery_file*
+*.secret
+secrets/
+
+# local evidence captures (raw recordings are large; keep hashes in MILESTONES.md)
+recordings/
+*.mov
+*.mp4
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

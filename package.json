@@ -1,0 +1,29 @@
+{
+  "name": "arc-router",
+  "private": true,
+  "version": "0.0.0",
+  "description": "USDC settlement leg on Arc for Promorphic's tokenized-asset router. Testnet by default.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=20.18.2"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "verify:chains": "tsx scripts/verify-chain-facts.ts",
+    "gateway:balance": "tsx scripts/gateway-balance.ts",
+    "secrets:scan": "bash scripts/secret-scan.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2"
+  },
+  "dependencies": {
+    "@promorphic/router": "workspace:*",
+    "viem": "^2.58.7"
+  }
+}
