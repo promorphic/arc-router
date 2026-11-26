@@ -1,0 +1,47 @@
+[
+  {
+    "date": "2026-11-26T15:00:08.136Z",
+    "milestone": "M1(b)",
+    "chain": "Arc Testnet",
+    "what": "USDC allowance granted to the Mandate contract",
+    "txHash": "0x7dc957f159a3c2dc0959e8d0e2d33f438fc42d79a3adf1b4ea59b20a8d6aa0a6",
+    "url": "https://explorer.testnet.arc.io/tx/0x7dc957f159a3c2dc0959e8d0e2d33f438fc42d79a3adf1b4ea59b20a8d6aa0a6",
+    "proves": "Customer 0x43fcd8798f6f59FaD358B6d682d34BAc33FDE4d9 (a test wallet standing in for the customer) allows the Mandate contract to move at most 5.000000 USDC. Funds stay in the customer's wallet."
+  },
+  {
+    "date": "2026-11-26T15:00:08.136Z",
+    "milestone": "M1(b)",
+    "chain": "Arc Testnet",
+    "what": "Mandate set by the customer (Mandate.setMandate)",
+    "txHash": "0x5e329b2d76cdbfa1ec62cf60d94305b4a9212f1bf319696c656632973644ecb0",
+    "url": "https://explorer.testnet.arc.io/tx/0x5e329b2d76cdbfa1ec62cf60d94305b4a9212f1bf319696c656632973644ecb0",
+    "proves": "Customer 0x43fcd8798f6f59FaD358B6d682d34BAc33FDE4d9 (a test wallet standing in for the customer) named the Circle Agent Wallet 0x1023fe642ca99b40028d187fe491c0e56a038c6e as agent: per-order cap 2.000000 USDC, rolling daily cap 5.000000 USDC, recipient allowlist [0x1413c01396354ae2F2F4b78BE93B0966ABaED3F0], expiry 2026-12-03T14:59:38.000Z."
+  },
+  {
+    "date": "2026-11-26T15:00:08.136Z",
+    "milestone": "M1(b)",
+    "chain": "Arc Testnet",
+    "what": "Agent Wallet proposal inside the limits: executed",
+    "txHash": "0x3a978f2aba74e571aa68adbb4cce491888bedeb5fb382eb0c0c9d0c85112f43d",
+    "url": "https://explorer.testnet.arc.io/tx/0x3a978f2aba74e571aa68adbb4cce491888bedeb5fb382eb0c0c9d0c85112f43d",
+    "proves": "The Circle Agent Wallet 0x1023fe642ca99b40028d187fe491c0e56a038c6e submitted \"m1b-20261126T145940-in-limit\" for 1.000000 USDC (per-order cap 2.000000). The Mandate contract moved it from customer 0x43fcd8798f6f59FaD358B6d682d34BAc33FDE4d9 straight to the allowlisted recipient 0x1413c01396354ae2F2F4b78BE93B0966ABaED3F0. The Agent Wallet never held the customer's USDC."
+  },
+  {
+    "date": "2026-11-26T15:00:08.136Z",
+    "milestone": "M1(b)",
+    "chain": "Arc Testnet",
+    "what": "Agent Wallet proposal over the per-order cap: rejected",
+    "txHash": "0xcb6bd14046870eb9d43e22554de6b57540296043b5d3fe9033c137a930465e5d",
+    "url": "https://explorer.testnet.arc.io/tx/0xcb6bd14046870eb9d43e22554de6b57540296043b5d3fe9033c137a930465e5d",
+    "proves": "The same Agent Wallet submitted \"m1b-20261126T145940-over-cap\" for 3.000000 USDC against a cap of 2.000000. The contract recorded ProposalRejected with reason OverPerOrderCap; the transaction succeeded and nothing moved."
+  },
+  {
+    "date": "2026-11-26T15:00:08.136Z",
+    "milestone": "M1(b)",
+    "chain": "Arc Testnet",
+    "what": "Agent Wallet proposal to a recipient outside the allowlist: rejected",
+    "txHash": "0x8fb5ba177df411e80433790f87f87921e7b594bb896822b1e7f7e0a7f9a0cca8",
+    "url": "https://explorer.testnet.arc.io/tx/0x8fb5ba177df411e80433790f87f87921e7b594bb896822b1e7f7e0a7f9a0cca8",
+    "proves": "The same Agent Wallet submitted \"m1b-20261126T145940-not-allowlisted\" paying 0xBd85e2cEf44A085ce382bEb2e540B012d37e54c5, which is not on the customer's allowlist. The contract recorded ProposalRejected with reason RecipientNotAllowed; nothing moved."
+  }
+]

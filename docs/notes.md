@@ -13,6 +13,15 @@ Dated notes on where Circle, Arc or Dinari behave differently from their documen
 - Policies are set through the Circle CLI (`circle wallet limit set`, CLI 1.4.0 or later). We found no public REST endpoint or JSON schema for policies, and no documented error shape for an out-of-policy request; we will record the actual response when we first see one.
 - A transfer limit needs all four caps (`--per-tx`, `--daily`, `--weekly`, `--monthly`) with per-tx ≤ daily ≤ weekly ≤ monthly. Windows are rolling; there is no absolute expiry, so the mandate's expiry lives in the Mandate contract only.
 
+### Agent Wallet on Arc testnet is a smart account with sponsored gas
+
+- `circle wallet list` showed the wallet's address before it had any code. After its first `circle wallet execute` the address holds a proxy contract: the wallet is a smart account, deployed on first use.
+- Its transactions are user operations. On the explorer the transaction's sender is a bundler and the recipient is the ERC-4337 EntryPoint v0.7 (`0x0000000071727De22E5E9d8BAf0edAc6f37da032`); three calls came from three different bundler addresses. A contract called by the wallet sees the wallet as `msg.sender`, which is what the Mandate contract checks.
+- Gas was sponsored: after three calls the wallet's balance was still exactly the 20 USDC the faucet sent. We have not found this stated in the docs and do not rely on it.
+- The CLI's help says that for an Agent Wallet the quiet output of `circle wallet execute` is Circle's transaction id rather than a transaction hash. We do not depend on the CLI's output shape: the script finds the decision in the Mandate contract's event log by proposal id.
+- A call that would revert is refused before signing: `--estimate` on a proposal from a wallet the mandate does not name returned `400: Estimate fee execution reverted.` A rejection by the Mandate contract is not a revert, so it goes through and gets a hash.
+- `circle wallet fund --chain ARC-TESTNET` sends 20 testnet USDC and only funds the caller's own wallets.
+
 ### Agent Wallet login is email one-time-password
 
 - `circle wallet login <email> --testnet` authenticates with an emailed one-time code, not an API key. Each policy change sends a second code.

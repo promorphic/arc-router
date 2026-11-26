@@ -21,7 +21,8 @@
     "test:e2e": "RUN_E2E=1 vitest run tests/e2e --testTimeout 180000 --hookTimeout 180000",
     "test:contracts": "cd contracts && forge test",
     "test:all": "pnpm typecheck && pnpm test && pnpm test:contracts && pnpm verify:chains && pnpm test:live && pnpm test:e2e",
-    "record": "tsx scripts/record.ts"
+    "record": "tsx scripts/record.ts",
+    "m1b:agent": "tsx --env-file-if-exists=.env scripts/m1b-agent.ts"
   },
   "devDependencies": {
     "@circle-fin/cli": "^1.4.0",
@@ -31,6 +32,7 @@
     "vitest": "^5.1.2"
   },
   "dependencies": {
+    "@promorphic/agent": "workspace:*",
     "@promorphic/router": "workspace:*",
     "viem": "^2.58.7"
   }

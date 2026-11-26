@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createPublicClient, http } from "viem";
 import { describe, expect, it } from "vitest";
+import { findOutcome, listArgs, parseAgentWallet, circleCli } from "@promorphic/agent";
 import {
   ARC_TESTNET,
   BASE_SEPOLIA,
@@ -87,6 +88,41 @@ describe.skipIf(!enabled)("live testnet (read-only)", () => {
         args: [NOBODY, `0x${"00".repeat(32)}`, ARC_TESTNET.usdc, NOBODY, 1n],
       }),
     ).rejects.toThrow(/NoMandate/);
+  });
+
+  // The M1(b) evidence run of 26 Nov 2026 (scripts/m1b-agent.ts), re-read from the chain.
+  const M1B = {
+    customer: "0x43fcd8798f6f59FaD358B6d682d34BAc33FDE4d9",
+    agentWallet: "0x1023fe642ca99b40028d187fe491c0e56a038c6e",
+    block: 74224871n,
+    run: "m1b-20261126T145940",
+  } as const;
+
+  it("Agent Wallet: the recorded in-limit proposal was executed by the Circle Agent Wallet", async () => {
+    const outcome = await findOutcome(arc, { customer: M1B.customer, reference: `${M1B.run}-in-limit` }, { mandate: MANDATE_ARC_TESTNET.address, fromBlock: M1B.block, toBlock: M1B.block });
+    expect(outcome).toMatchObject({ outcome: "ProposalExecuted", reason: "None", txHash: "0x3a978f2aba74e571aa68adbb4cce491888bedeb5fb382eb0c0c9d0c85112f43d" });
+    expect(outcome!.agent.toLowerCase()).toBe(M1B.agentWallet);
+  });
+
+  it("Agent Wallet: the recorded out-of-limit proposals were rejected with their reasons", async () => {
+    const window = { mandate: MANDATE_ARC_TESTNET.address, fromBlock: M1B.block, toBlock: M1B.block + 200n };
+    const overCap = await findOutcome(arc, { customer: M1B.customer, reference: `${M1B.run}-over-cap` }, window);
+    expect(overCap).toMatchObject({ outcome: "ProposalRejected", reason: "OverPerOrderCap", txHash: "0xcb6bd14046870eb9d43e22554de6b57540296043b5d3fe9033c137a930465e5d" });
+    const stranger = await findOutcome(arc, { customer: M1B.customer, reference: `${M1B.run}-not-allowlisted` }, window);
+    expect(stranger).toMatchObject({ outcome: "ProposalRejected", reason: "RecipientNotAllowed", txHash: "0x8fb5ba177df411e80433790f87f87921e7b594bb896822b1e7f7e0a7f9a0cca8" });
+  });
+
+  it("Agent Wallet: it is a smart account, so its transactions arrive through a bundler", async () => {
+    expect(((await arc.getCode({ address: M1B.agentWallet })) ?? "0x").length).toBeGreaterThan(2);
+    const receipt = await arc.getTransactionReceipt({ hash: "0x3a978f2aba74e571aa68adbb4cce491888bedeb5fb382eb0c0c9d0c85112f43d" });
+    // ERC-4337 EntryPoint v0.7. The transaction's sender is a bundler; the Mandate contract saw the Agent Wallet as caller.
+    expect(receipt.to?.toLowerCase()).toBe("0x0000000071727de22e5e9d8baf0edac6f37da032");
+    expect(receipt.from.toLowerCase()).not.toBe(M1B.agentWallet);
+  });
+
+  it.skipIf(process.env.RUN_CIRCLE_CLI !== "1")("Agent Wallet: the Circle CLI session lists the wallet on Arc testnet", async () => {
+    const out = await circleCli(resolve(import.meta.dirname, "../.."))(listArgs("ARC-TESTNET"));
+    expect(parseAgentWallet(out, "ARC-TESTNET")?.toLowerCase()).toBe(M1B.agentWallet);
   });
 
   it.skipIf(!process.env.CIRCLE_API_KEY)("Circle Wallets: the testnet key authenticates and belongs to the configured app", async () => {

@@ -11,8 +11,8 @@ Promorphic is agentic, cross-chain trading and portfolio management for tokenize
 Read this first. It is kept current with every push, and nothing below it should contradict it.
 
 - **Live (mainnet):** nothing. No mainnet transaction has been sent from this repository.
-- **Testnet, proven with hashes:** the Mandate contract is deployed on Arc testnet ([`0x2D1CBBEea337a30dF22C0446dB2528B98B543D10`](https://explorer.testnet.arc.io/address/0x2D1CBBEea337a30dF22C0446dB2528B98B543D10)). A live end-to-end run with test keys shows an in-limit payment executing and over-cap, wrong-recipient, over-daily-cap, unapproved and post-revoke proposals each being rejected on-chain. The audit record export of that run is in [`evidence/`](evidence/).
-- **Testnet, working but not yet run end to end:** the CCTP V2 transfer into a Circle user-controlled wallet and the Circle Agent Wallet acting through the mandate. The demo app, the server flow and Circle's testnet API calls are built and tested; the run needs the customer to set a PIN and log in to the Circle CLI. The Gateway unified-balance read works against Circle's testnet API.
+- **Testnet, proven with hashes:** the Mandate contract is deployed on Arc testnet ([`0x2D1CBBEea337a30dF22C0446dB2528B98B543D10`](https://explorer.testnet.arc.io/address/0x2D1CBBEea337a30dF22C0446dB2528B98B543D10)). A live end-to-end run with test keys shows an in-limit payment executing and over-cap, wrong-recipient, over-daily-cap, unapproved and post-revoke proposals each being rejected on-chain. A Circle Agent Wallet on Arc testnet has submitted proposals through the contract: one inside the limits executed, one over the cap and one to a recipient outside the allowlist were rejected, each with a hash. In that run the customer was a test wallet holding faucet funds, not yet a Circle user-controlled wallet. The audit record exports are in [`evidence/`](evidence/).
+- **Testnet, working but not yet run end to end:** the CCTP V2 transfer into a Circle user-controlled wallet, and that wallet (rather than a test wallet) setting the mandate. The demo app, the server flow and Circle's testnet API calls are built and tested; the run needs the customer to set a PIN. The Gateway unified-balance read works against Circle's testnet API.
 - **Checked:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) against the live testnets by `pnpm verify:chains`, 35 of 35 on 26 Nov 2026.
 - **Planned:** milestones M1 to M4 below. Evidence for each (transaction hash, explorer link, date, what it proves) is logged in [MILESTONES.md](MILESTONES.md) as it is produced.
 
@@ -107,14 +107,20 @@ The agent is a Circle Agent Wallet. The customer creates it by logging in to the
 pnpm exec circle wallet login you@example.com --testnet
 ```
 
+```bash
+pnpm m1b:agent
+```
+
+Sends testnet transactions: a test wallet standing in for the customer sets a mandate naming the Agent Wallet, then the Agent Wallet submits three proposals through the Circle CLI (inside the limits, over the cap, to a recipient outside the allowlist) and the script prints the hash and the contract's decision for each. With `--customer 0x… --recipient 0x…` it skips the setup and uses a mandate the customer's own wallet already set.
+
 ### Tests
 
 | Command | What it covers | Network |
 |---|---|---|
-| `pnpm test` | Unit tests: chain facts helpers, CCTP fee and attestation logic, Gateway read, Circle Wallets client, mandate calldata, and every demo server flow over HTTP with Circle and the chains faked | none |
+| `pnpm test` | Unit tests: chain facts helpers, CCTP fee and attestation logic, Gateway read, Circle Wallets client, mandate calldata, the Agent Wallet's Circle CLI calls and decision reader, and every demo server flow over HTTP with Circle and the chains faked | none |
 | `pnpm test:contracts` | Foundry tests for the Mandate contract, including a fuzz test of the rolling daily cap | none |
 | `pnpm verify:chains` | Every hardcoded address, chain id and domain against the live testnets | read-only |
-| `pnpm test:live` | Fee API, Gateway, the deployed Mandate contract, Circle API key | read-only |
+| `pnpm test:live` | Fee API, Gateway, the deployed Mandate contract, the recorded Agent Wallet transactions, Circle API key | read-only |
 | `pnpm test:e2e` | The full Mandate flow on Arc testnet with test keys: real transactions, a few cents of faucet USDC | sends testnet transactions |
 | `pnpm test:all` | All of the above | |
 
@@ -137,7 +143,7 @@ Copy `.env.example` to `.env` for anything that signs. Use testnet keys and fauc
 | Path | What |
 |---|---|
 | `packages/router` | Settlement and routing service: chain facts, CCTP V2, Gateway |
-| `packages/agent` | Mandate reader and Copilot proposer (M3) |
+| `packages/agent` | The agent side: submits proposals from a Circle Agent Wallet. The Copilot proposer is M3 |
 | `contracts/` | Mandate contract (its event log is the record), Foundry |
 | `apps/demo` | Local demo page and server for the milestone recordings |
 | `scripts/` | Evidence scripts that print hashes; chain-fact verification; audit record export; secret scan |

@@ -2,7 +2,6 @@
  * Local demo server: the API in ./api.ts plus the Vite dev server for the page, on one port.
  * Testnet only. Run with `pnpm demo` from the repository root.
  */
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { dirname, resolve } from "node:path";
@@ -29,6 +28,7 @@ import {
   type Address,
   type TestnetChain,
 } from "@promorphic/router";
+import { circleCli, listArgs, parseAgentWallet } from "@promorphic/agent";
 import { createApi, type ApiDeps } from "./api.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -66,15 +66,7 @@ let agentCheckedAt = 0;
 async function resolveAgentWallet(): Promise<Address | undefined> {
   if (agentWallet || Date.now() - agentCheckedAt < 15_000) return agentWallet;
   agentCheckedAt = Date.now();
-  const out = await new Promise<string>((done) =>
-    execFile(
-      "pnpm",
-      ["exec", "circle", "wallet", "list", "--type", "agent", "--chain", ARC_TESTNET.circleBlockchain, "--output", "json"],
-      { cwd: repoRoot, timeout: 20_000 },
-      (_err, stdout) => done(String(stdout ?? "")),
-    ),
-  );
-  agentWallet = out.match(/0x[0-9a-fA-F]{40}/)?.[0] as Address | undefined;
+  agentWallet = parseAgentWallet(await circleCli(repoRoot)(listArgs("ARC-TESTNET")).catch(() => ""), "ARC-TESTNET");
   return agentWallet;
 }
 

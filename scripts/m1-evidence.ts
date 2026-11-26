@@ -13,8 +13,8 @@
  * customer's funding wallet. Destination: ARC_USER_WALLET_ADDRESS, the customer's Circle
  * user-controlled wallet on Arc testnet.
  *
- * Covers 1a and 1c. 1b (Agent Wallet through the Mandate contract) is driven by the Circle CLI,
- * because the Agent Wallet's session belongs to the customer; it is not part of this script yet.
+ * Covers 1a and 1c. 1b (Agent Wallet through the Mandate contract) is `pnpm m1b:agent`
+ * (scripts/m1b-agent.ts), which drives the Agent Wallet through the Circle CLI.
  */
 import { createPublicClient, createWalletClient, http, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
