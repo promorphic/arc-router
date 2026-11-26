@@ -106,5 +106,23 @@
     "txHash": "0x7417d889f16369567d60505322bed62f796957fa9ea6857622c86f4932558de7",
     "url": "https://explorer.testnet.arc.io/tx/0x7417d889f16369567d60505322bed62f796957fa9ea6857622c86f4932558de7",
     "proves": "The same Agent Wallet submitted \"m1b-20261126T155526-not-allowlisted\" paying 0x0682E4Cf532EE8137ae09559F8A31baecC5bB701, which is not on the customer's allowlist. The contract recorded ProposalRejected with reason RecipientNotAllowed; nothing moved."
+  },
+  {
+    "date": "2026-11-26T16:38:28.256Z",
+    "milestone": "M1(c)",
+    "chain": "Ethereum Sepolia",
+    "what": "Deposit into Circle Gateway (GatewayWallet.deposit)",
+    "txHash": "0xd174b1bc42e5525671b731b6147cb278a5ad55f6a8be864d04a7494972bf7b78",
+    "url": "https://sepolia.etherscan.io/tx/0xd174b1bc42e5525671b731b6147cb278a5ad55f6a8be864d04a7494972bf7b78",
+    "proves": "The customer's Circle user-controlled wallet 0xdc2fefe9fa4b011eec12811c547e702b50781c04 deposited 5.000000 USDC into Gateway on Ethereum Sepolia, signed with the customer's PIN. It becomes part of the customer's unified balance once final."
+  },
+  {
+    "date": "2026-11-26T17:08:08.483Z",
+    "milestone": "M1(c)",
+    "chain": "Arc Testnet",
+    "what": "Gateway mint on Arc funded from the unified balance (GatewayMinter.gatewayMint)",
+    "txHash": "0xe788e31043d4603ef0692e44557ef39609c7310614055f2b6130c480adfcf249",
+    "url": "https://explorer.testnet.arc.io/tx/0xe788e31043d4603ef0692e44557ef39609c7310614055f2b6130c480adfcf249",
+    "proves": "2.000000 USDC from the customer's Gateway balance on Ethereum Sepolia was minted to the customer's wallet 0xdc2fefe9fa4b011eec12811c547e702b50781c04 on Arc Testnet: balance 3.994272 -> 5.994272. The customer signed one burn intent with their PIN (fee cap 1.100000 USDC) and sent no transaction; Gateway transfer d79b1916-ff2b-45d9-84af-c3aa8fe6e081; 3.1 s from signature to mint."
   }
 ]

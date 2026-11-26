@@ -13,6 +13,15 @@ Dated notes on where Circle, Arc or Dinari behave differently from their documen
 - Policies are set through the Circle CLI (`circle wallet limit set`, CLI 1.4.0 or later). We found no public REST endpoint or JSON schema for policies, and no documented error shape for an out-of-policy request; we will record the actual response when we first see one.
 - A transfer limit needs all four caps (`--per-tx`, `--daily`, `--weekly`, `--monthly`) with per-tx ≤ daily ≤ weekly ≤ monthly. Windows are rolling; there is no absolute expiry, so the mandate's expiry lives in the Mandate contract only.
 
+### First Gateway transfer, Ethereum Sepolia balance to Arc testnet
+
+- A deposit on Ethereum Sepolia counted in `POST /v1/balances` 860 s (a little over 14 minutes) after it confirmed. The docs give 13 to 19 minutes for Ethereum; nothing shows as pending in between on our read, which sums `balance` only.
+- `POST /v1/estimate` takes `[{ "spec": … }]` (a body of `[{ "burnIntent": … }]` without a signature is refused: "Must be either an PartialBurnIntent or PartialBurnIntentSet") and returns the burn intent with `maxBlockHeight` and `maxFee` filled in. It echoes the address fields unpadded (20 bytes); we keep our own 32-byte-padded spec and take only the two numbers.
+- Fee: the estimate's cap for 2 USDC from Ethereum Sepolia to Arc testnet was 1.1 USDC; the charge was 1 USDC (`baseFee` 1, `transferFee` 0, as the fees page says for transfers that touch Arc). A fixed base fee of this size makes small transfers out of an Ethereum balance expensive; the router should fetch the estimate and show it before asking for a signature, which it does.
+- `POST /v1/transfer` refuses an intent with no funded balance behind it with a 4xx and a JSON `message`. `GET /v1/transfer/{id}` afterwards reports `status: "finalized"`, the destination transaction hash and the fees.
+- A Circle user-controlled wallet signs the burn intent through `POST /v1/w3s/user/sign/typedData` (the whole EIP-712 document as a JSON string, uint256 fields as decimal strings, domain with name and version only). The signature comes back to the page in the Web SDK callback as `result.data.signature`. We recover the signer from it before anything goes to Gateway.
+- From signature to mint on Arc took 3.1 s. `gatewayMint` can be submitted by any address when `destinationCaller` is zero; we submit it from a test wallet that only pays gas.
+
 ### First CCTP V2 Fast Transfer, Ethereum Sepolia to Arc testnet
 
 - 5 USDC, `minFinalityThreshold` 1000. The fee charged was 0.000125 USDC (0.25 bps), so 4.999875 USDC was minted.

@@ -17,6 +17,7 @@ import {
   CCTP_V2_TESTNET,
   CIRCLE_API_URL,
   ETH_SEPOLIA,
+  GATEWAY_TESTNET,
   MANDATE_ARC_TESTNET,
   buildTransferSpec,
   erc20Abi,
@@ -159,6 +160,23 @@ describe.skipIf(!enabled)("live testnet (read-only)", () => {
     const transfers = parseEventLogs({ abi: erc20Abi, logs: mint.logs, eventName: "Transfer" }).filter((t) => t.address.toLowerCase() === ARC_TESTNET.usdc.toLowerCase());
     const received = transfers.filter((t) => t.args.to.toLowerCase() === CUSTOMER).reduce((sum, t) => sum + t.args.value, 0n);
     expect(received).toBe(4_999_875n);
+  });
+
+  it("Gateway: the recorded mint on Arc paid the customer 2 USDC and was submitted by a relayer", async () => {
+    const mint = await arc.getTransactionReceipt({ hash: "0xe788e31043d4603ef0692e44557ef39609c7310614055f2b6130c480adfcf249" });
+    expect(mint.status).toBe("success");
+    expect(mint.to?.toLowerCase()).toBe(GATEWAY_TESTNET.gatewayMinter.toLowerCase());
+    expect(mint.from.toLowerCase()).not.toBe(CUSTOMER);
+    const received = parseEventLogs({ abi: erc20Abi, logs: mint.logs, eventName: "Transfer" })
+      .filter((t) => t.address.toLowerCase() === ARC_TESTNET.usdc.toLowerCase() && t.args.to.toLowerCase() === CUSTOMER)
+      .reduce((sum, t) => sum + t.args.value, 0n);
+    expect(received).toBe(2_000_000n);
+
+    const sepolia = createPublicClient({ transport: transportFor(ETH_SEPOLIA) });
+    const deposit = await sepolia.getTransactionReceipt({ hash: "0xd174b1bc42e5525671b731b6147cb278a5ad55f6a8be864d04a7494972bf7b78" });
+    expect(deposit.status).toBe("success");
+    expect(deposit.from.toLowerCase()).toBe(CUSTOMER);
+    expect(deposit.to?.toLowerCase()).toBe(GATEWAY_TESTNET.gatewayWallet.toLowerCase());
   });
 
   it("Mandate: the customer's Circle wallet set the mandate and the Agent Wallet's proposals were decided under it", async () => {

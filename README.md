@@ -14,9 +14,9 @@ Read this first. It is kept current with every push, and nothing below it should
 - **Testnet, proven with hashes:**
   - A CCTP V2 Fast Transfer moved 5 USDC from Ethereum Sepolia to Arc testnet, from and to a Circle user-controlled wallet, signed with the customer's PIN; 59 seconds from approval to mint.
   - The Mandate contract is deployed on Arc testnet ([`0x2D1CBBEea337a30dF22C0446dB2528B98B543D10`](https://explorer.testnet.arc.io/address/0x2D1CBBEea337a30dF22C0446dB2528B98B543D10)). That Circle wallet set a mandate naming a Circle Agent Wallet, and the Agent Wallet's proposals were executed inside the limits and rejected outside them (over the cap, recipient not allowlisted).
+  - Circle Gateway: the same wallet deposited 5 USDC on Ethereum Sepolia, the router read the unified balance, and 2 USDC of it was minted to the wallet on Arc from one signed message, with no transaction sent by the customer.
   - A live end-to-end run with test keys also shows over-daily-cap, unapproved (Copilot) and post-revoke proposals being rejected on-chain.
   - Hashes are in [MILESTONES.md](MILESTONES.md); audit record exports are in [`evidence/`](evidence/).
-- **Testnet, partly working:** the Gateway unified-balance read works against Circle's testnet API. Nothing has been deposited into Gateway and no Arc-side action has been funded from it.
 - **Checked:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) against the live testnets by `pnpm verify:chains`, 35 of 35 on 26 Nov 2026.
 - **Planned:** milestones M1 to M4 below. Evidence for each (transaction hash, explorer link, date, what it proves) is logged in [MILESTONES.md](MILESTONES.md) as it is produced.
 
@@ -62,7 +62,7 @@ The mandate is enforced twice: by the Mandate contract (asset and recipient allo
 | CCTP V2 (Fast Transfer where the route offers it) | Moves the USDC leg from the customer's funding chain to Arc and back out to an issuer's chain. V1 is not used. | Constants verified on testnet; transfer in M1 |
 | Circle Wallets, user-controlled | The customer's operational wallet on Arc. User-controlled, not developer-controlled, because the keys must stay with the customer. | M1 |
 | Agent Wallets and spend policies | The agent's execution wallet. Circle enforces the transfer caps and allowlists the customer sets. | Wallet on testnet in M1; policies on mainnet in M3 (Circle applies policies to mainnet Agent Wallets only) |
-| Gateway | Unified USDC balance across chains, so an Arc-side action can be funded without a bridge step first. | Balance read working on testnet; funding flow in M1 |
+| Gateway | Unified USDC balance across chains, so an Arc-side action can be funded without a bridge step first. | Balance read, deposit and a Sepolia-funded mint on Arc shown on testnet (M1) |
 | Arc | Settlement chain for the USDC leg; home of the Mandate contract. | Testnet in M1, M3, M4; mainnet in M2 |
 | USYC (Entitlements and Teller) | USDC to USYC mint and redeem for eligible non-US institutions. **Testnet only in this repository.** Mainnet is enabled per customer. | M4 |
 
@@ -146,7 +146,7 @@ Copy `.env.example` to `.env` for anything that signs. Use testnet keys and fauc
 
 | Path | What |
 |---|---|
-| `packages/router` | Settlement and routing service: chain facts, CCTP V2, Gateway |
+| `packages/router` | Settlement and routing service: chain facts, CCTP V2, Gateway (balance read, deposit, burn intent, mint), Circle Wallets client, mandate client |
 | `packages/agent` | The agent side: submits proposals from a Circle Agent Wallet. The Copilot proposer is M3 |
 | `contracts/` | Mandate contract (its event log is the record), Foundry |
 | `apps/demo` | Local demo page and server for the milestone recordings |
