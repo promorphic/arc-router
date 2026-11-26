@@ -1,5 +1,6 @@
 export * from "./chains.ts";
 export * from "./gateway.ts";
+export * from "./gateway-transfer.ts";
 export * from "./cctp.ts";
 export * from "./circle-wallets.ts";
 export * from "./mandate.ts";

@@ -4,10 +4,10 @@
  * in Circle's SDK frame in the browser.
  *
  * The one key this server holds is the test relayer key, which pays gas to submit the CCTP
- * mint on Arc. Submitting a mint is permissionless and the minted USDC goes to the recipient
- * fixed in the burn, so the relayer never has custody of anything.
+ * mint and the Gateway mint on Arc. Submitting either is permissionless and the minted USDC
+ * goes to the recipient fixed in what the customer signed, so the relayer never has custody.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname } from "node:path";
@@ -18,24 +18,35 @@ import {
   CCTP_FINALITY,
   CCTP_V2_TESTNET,
   ETH_SEPOLIA,
+  GATEWAY_TESTNET,
   MANDATE_ARC_TESTNET,
   USER_ALREADY_INITIALIZED,
   CircleApiError,
   addressToBytes32,
   baseUnitsToUsdc,
+  buildTransferSpec,
+  burnIntentFromJson,
+  burnIntentToJson,
+  burnIntentTypedDataJson,
+  encodeGatewayDeposit,
   encodeSetMandate,
   erc20Abi,
   explorerTxUrl,
+  maxDebit,
   maxFeeFor,
+  recoverBurnIntentSigner,
   tokenMessengerV2Abi,
   usdcToBaseUnits,
   type Address,
+  type BurnIntent,
   type CircleWallet,
   type CircleWalletsClient,
   type FeeQuote,
   type MandateTerms,
   type RecordEntry,
   type TestnetChain,
+  type TransferAttestation,
+  type TransferSpec,
   type UnifiedBalance,
 } from "@promorphic/router";
 
@@ -54,6 +65,17 @@ export interface DemoState {
   wallets?: { source?: { id: string; address: Address }; arc?: { id: string; address: Address } };
   /** In-flight CCTP transfer, kept so a page reload can resume it. */
   cctp?: { amount: string; burnTxHash?: Hex; mintTxHash?: Hex; attestationSeconds?: number; totalSeconds?: number };
+  /** Gateway: the deposit on the source chain, and the transfer funded from it. */
+  gateway?: {
+    depositAmount?: string;
+    depositTxHash?: Hex;
+    /** The burn intent the customer has been asked to sign, until it is used. */
+    pendingIntent?: ReturnType<typeof burnIntentToJson>;
+    value?: string;
+    feeCap?: string;
+    transferId?: string;
+    mintTxHash?: Hex;
+  };
 }
 
 /** Everything the API touches outside this process, injectable so the flows can be tested. */
@@ -61,7 +83,7 @@ export interface ApiDeps {
   appId: string;
   circle: Pick<
     CircleWalletsClient,
-    "createUser" | "createUserToken" | "initializeUser" | "listWallets" | "createContractExecutionChallenge" | "waitForChallengeTransaction"
+    "createUser" | "createUserToken" | "initializeUser" | "listWallets" | "createContractExecutionChallenge" | "createSignTypedDataChallenge" | "waitForChallengeTransaction"
   >;
   /** The agent's address (Circle Agent Wallet), named in the mandate. Undefined until it exists. */
   agentWallet(): Promise<Address | undefined>;
@@ -77,6 +99,12 @@ export interface ApiDeps {
     /** Submits the attested message on Arc from the test relayer. */
     relayMint(message: Hex, attestation: Hex): Promise<Hex>;
     unifiedBalance(who: Address): Promise<UnifiedBalance>;
+    /** Gateway's fee cap and expiry for a transfer. */
+    gatewayEstimate(spec: TransferSpec): Promise<BurnIntent>;
+    /** Sends the customer's signed burn intent to Gateway; returns the attestation to mint with. */
+    gatewayTransfer(intent: BurnIntent, signature: Hex): Promise<TransferAttestation>;
+    /** Submits the Gateway mint on Arc from the test relayer. */
+    relayGatewayMint(attestation: Hex, signature: Hex): Promise<Hex>;
     mandateTerms(customer: Address): Promise<MandateTerms | undefined>;
     mandateRecord(customer: Address): Promise<RecordEntry[]>;
     spentInWindow(customer: Address): Promise<bigint>;
@@ -209,13 +237,86 @@ export function createApi(deps: ApiDeps) {
           callData: encodeSetMandate(await mandateTermsInput(body)),
           refId: "m1b-set-mandate",
         });
+      case "gateway-approve":
+        return deps.circle.createContractExecutionChallenge(token, {
+          walletId: w.source.id,
+          contractAddress: SOURCE.usdc,
+          callData: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GATEWAY_TESTNET.gatewayWallet, amount] }),
+          refId: "m1c-approve",
+        });
+      case "gateway-deposit":
+        setState({ gateway: { ...state().gateway, depositAmount: baseUnitsToUsdc(amount) } });
+        return deps.circle.createContractExecutionChallenge(token, {
+          walletId: w.source.id,
+          contractAddress: GATEWAY_TESTNET.gatewayWallet,
+          callData: encodeGatewayDeposit(SOURCE.usdc, amount),
+          refId: "m1c-deposit",
+        });
+      case "gateway-sign": {
+        // From the customer's Gateway balance on the source chain to the customer's own wallet on Arc.
+        const value = usdcToBaseUnits(String(body.value ?? "2"));
+        const spec = buildTransferSpec({
+          source: SOURCE,
+          destination: DESTINATION,
+          depositor: w.source.address,
+          recipient: w.arc.address,
+          value,
+          salt: `0x${randomBytes(32).toString("hex")}`,
+        });
+        const intent = await deps.chain.gatewayEstimate(spec);
+        const unified = await deps.chain.unifiedBalance(w.source.address);
+        const available = usdcToBaseUnits(unified.perDomain.find((d) => d.domain === SOURCE.cctpDomain)?.balance ?? "0");
+        if (available < maxDebit(intent)) {
+          throw new HttpError(
+            409,
+            `Your Gateway balance on ${SOURCE.name} is ${baseUnitsToUsdc(available)} USDC; this transfer needs up to ${baseUnitsToUsdc(maxDebit(intent))} (${baseUnitsToUsdc(value)} plus a fee cap of ${baseUnitsToUsdc(intent.maxFee)}). A deposit counts once it is final on ${SOURCE.name}, about 13 to 19 minutes.`,
+          );
+        }
+        setState({ gateway: { ...state().gateway, pendingIntent: burnIntentToJson(intent), value: baseUnitsToUsdc(value), feeCap: baseUnitsToUsdc(intent.maxFee) } });
+        return deps.circle.createSignTypedDataChallenge(token, {
+          walletId: w.source.id,
+          data: burnIntentTypedDataJson(intent),
+          memo: `Move ${baseUnitsToUsdc(value)} USDC from your Gateway balance to your wallet on ${DESTINATION.name}`,
+        });
+      }
       default:
         throw new HttpError(400, `unknown action "${action}"`);
     }
   }
 
+  /** The customer signed the burn intent: Gateway attests, the relayer mints on Arc, evidence is recorded. */
+  async function finishGatewayTransfer(signature: string) {
+    const w = requireWallets();
+    const pending = state().gateway?.pendingIntent;
+    if (!pending) throw new HttpError(409, "No Gateway transfer is waiting for a signature.");
+    if (!/^0x[0-9a-fA-F]{130}$/.test(signature)) throw new HttpError(400, "The signature from the Circle window is missing or malformed.");
+    const intent = burnIntentFromJson(pending);
+    const signer = await recoverBurnIntentSigner(intent, signature as Hex);
+    if (signer.toLowerCase() !== w.source.address.toLowerCase()) {
+      throw new HttpError(400, `The burn intent was signed by ${signer}, not the customer's wallet ${w.source.address}.`);
+    }
+    const started = now().getTime();
+    const before = await deps.chain.usdcBalance(DESTINATION, w.arc.address);
+    const attested = await deps.chain.gatewayTransfer(intent, signature as Hex);
+    const mintTxHash = await deps.chain.relayGatewayMint(attested.attestation, attested.signature);
+    const after = await deps.chain.usdcBalance(DESTINATION, w.arc.address);
+    const seconds = Math.round((now().getTime() - started) / 100) / 10;
+    setState({ gateway: { ...state().gateway, pendingIntent: undefined, transferId: attested.transferId, mintTxHash } });
+    addEvidence({
+      milestone: "M1(c)",
+      chain: DESTINATION.name,
+      what: "Gateway mint on Arc funded from the unified balance (GatewayMinter.gatewayMint)",
+      txHash: mintTxHash,
+      url: explorerTxUrl(DESTINATION, mintTxHash),
+      proves: `${baseUnitsToUsdc(intent.spec.value)} USDC from the customer's Gateway balance on ${SOURCE.name} was minted to the customer's wallet ${w.arc.address} on ${DESTINATION.name}: balance ${baseUnitsToUsdc(before)} -> ${baseUnitsToUsdc(after)}. The customer signed one burn intent with their PIN (fee cap ${baseUnitsToUsdc(intent.maxFee)} USDC) and sent no transaction; Gateway transfer ${attested.transferId}; ${seconds} s from signature to mint.`,
+    });
+    return { mintTxHash, url: explorerTxUrl(DESTINATION, mintTxHash), seconds: String(seconds), transferId: attested.transferId };
+  }
+
   /** After the customer approved a challenge in the SDK frame: wait for the chain, record evidence. */
-  async function complete(action: string, challengeId: string) {
+  async function complete(action: string, challengeId: string, body: Record<string, unknown> = {}) {
+    // Signing a burn intent creates no transaction, so there is nothing to wait for at Circle.
+    if (action === "gateway-sign") return finishGatewayTransfer(String(body.signature ?? ""));
     const { userToken: token } = await userToken();
     const w = requireWallets();
     const started = now().getTime();
@@ -223,7 +324,21 @@ export function createApi(deps: ApiDeps) {
 
     switch (action) {
       case "cctp-approve":
+      case "gateway-approve":
         return { txHash: tx.txHash, url: explorerTxUrl(SOURCE, tx.txHash) };
+      case "gateway-deposit": {
+        const amount = state().gateway?.depositAmount ?? "?";
+        setState({ gateway: { ...state().gateway, depositTxHash: tx.txHash } });
+        addEvidence({
+          milestone: "M1(c)",
+          chain: SOURCE.name,
+          what: "Deposit into Circle Gateway (GatewayWallet.deposit)",
+          txHash: tx.txHash,
+          url: explorerTxUrl(SOURCE, tx.txHash),
+          proves: `The customer's Circle user-controlled wallet ${w.source.address} deposited ${amount} USDC into Gateway on ${SOURCE.name}, signed with the customer's PIN. It becomes part of the customer's unified balance once final.`,
+        });
+        return { txHash: tx.txHash, url: explorerTxUrl(SOURCE, tx.txHash) };
+      }
       case "cctp-burn": {
         const amount = state().cctp?.amount ?? "?";
         setState({ cctp: { amount, burnTxHash: tx.txHash } });
@@ -299,6 +414,7 @@ export function createApi(deps: ApiDeps) {
       allowedRecipient: deps.allowedRecipient,
       mandateContract: MANDATE_ARC_TESTNET.address,
       cctp: s.cctp ?? null,
+      gatewayFlow: s.gateway ?? null,
       evidence: loadJson<EvidenceEntry[]>(deps.evidencePath, []),
     };
     if (w?.source && w.arc) {
@@ -358,7 +474,7 @@ export function createApi(deps: ApiDeps) {
       return { wallets };
     },
     "POST /api/challenge": (body) => createChallenge(String(body.action), body),
-    "POST /api/complete": (body) => complete(String(body.action), String(body.challengeId)),
+    "POST /api/complete": (body) => complete(String(body.action), String(body.challengeId), body),
     "POST /api/cctp/resume": async () => {
       const burn = state().cctp?.burnTxHash;
       if (!burn) throw new HttpError(409, "No burn to resume.");

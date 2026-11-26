@@ -18,13 +18,16 @@ import {
   CIRCLE_API_URL,
   ETH_SEPOLIA,
   MANDATE_ARC_TESTNET,
+  buildTransferSpec,
   erc20Abi,
+  estimateBurnIntent,
   fetchFee,
   mandateAbi,
   maxFeeFor,
   readRecord,
   readTerms,
   readUnifiedBalance,
+  requestTransferAttestation,
   transportFor,
 } from "@promorphic/router";
 
@@ -62,6 +65,23 @@ describe.skipIf(!enabled)("live testnet (read-only)", () => {
     expect(balance.perDomain.map((b) => b.chain).sort()).toEqual(["Arc Testnet", "Base Sepolia", "Ethereum Sepolia"]);
     expect(balance.total).toMatch(/^\d+\.\d{6}$/);
     expect(balance.totalBaseUnits).toBe(balance.perDomain.reduce((sum, b) => sum + BigInt(Math.round(Number(b.balance) * 1e6)), 0n));
+  });
+
+  it("Gateway: the estimate endpoint prices a Sepolia to Arc transfer and the fee cap is a few USDC at most", async () => {
+    const spec = buildTransferSpec({ source: ETH_SEPOLIA, destination: ARC_TESTNET, depositor: NOBODY, recipient: NOBODY, value: 2_000_000n, salt: `0x${"5a".repeat(32)}` });
+    const intent = await estimateBurnIntent(spec);
+    expect(intent.spec).toEqual(spec);
+    expect(intent.maxFee).toBeGreaterThan(0n);
+    expect(intent.maxFee).toBeLessThan(5_000_000n);
+    const sepolia = createPublicClient({ transport: transportFor(ETH_SEPOLIA) });
+    // The intent stays usable for a while: its expiry is ahead of the source chain's head.
+    expect(intent.maxBlockHeight).toBeGreaterThan(await sepolia.getBlockNumber());
+  });
+
+  it("Gateway: a burn intent nobody funded is refused, so nothing can be minted from thin air", async () => {
+    const spec = buildTransferSpec({ source: ETH_SEPOLIA, destination: ARC_TESTNET, depositor: NOBODY, recipient: NOBODY, value: 2_000_000n, salt: `0x${"5b".repeat(32)}` });
+    const intent = await estimateBurnIntent(spec);
+    await expect(requestTransferAttestation(intent, `0x${"11".repeat(65)}`)).rejects.toThrow(/\/v1\/transfer returned 4\d\d/);
   });
 
   it("Mandate: the deployed contract is the one in this repository", async () => {

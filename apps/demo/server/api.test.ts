@@ -8,18 +8,23 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeFunctionData, getAddress, type Hex } from "viem";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ARC_TESTNET,
   CCTP_V2_TESTNET,
   CircleApiError,
   ETH_SEPOLIA,
+  GATEWAY_TESTNET,
   MANDATE_ARC_TESTNET,
   USER_ALREADY_INITIALIZED,
+  bytes32ToAddress,
   erc20Abi,
+  gatewayWalletAbi,
   mandateAbi,
   tokenMessengerV2Abi,
   type Address,
+  type BurnIntent,
   type CircleWallet,
   type MandateTerms,
 } from "@promorphic/router";
@@ -51,6 +56,11 @@ let world: {
   terms: MandateTerms | undefined;
   relayed: { message: Hex; attestation: Hex }[];
   txHashes: Hex[];
+  /** Gateway: the depositor's balance on Ethereum Sepolia, what was asked to be signed, and what was sent on. */
+  gatewayBalance: string;
+  signRequests: { walletId: string; data: string; memo?: string }[];
+  gatewayTransfers: { intent: BurnIntent; signature: Hex }[];
+  gatewayMints: { attestation: Hex; signature: Hex }[];
 };
 
 function deps(): ApiDeps {
@@ -77,6 +87,10 @@ function deps(): ApiDeps {
         challenges.push(tx);
         return { challengeId: `ch-${challenges.length}` };
       },
+      createSignTypedDataChallenge: async (_token, req) => {
+        world.signRequests.push(req);
+        return { challengeId: `sign-${world.signRequests.length}` };
+      },
       waitForChallengeTransaction: async (_token, id) => ({ id: `tx-${id}`, state: "CONFIRMED", txHash: world.txHashes.shift() ?? "0x0" }),
     },
     chain: {
@@ -89,7 +103,26 @@ function deps(): ApiDeps {
         world.arcUsdc += 5_000_000n;
         return "0x1111";
       },
-      unifiedBalance: async (who) => ({ depositor: who, totalBaseUnits: 0n, total: "0.000000", perDomain: [{ domain: 26, chain: "Arc Testnet", balance: "0" }] }),
+      unifiedBalance: async (who) => ({
+        depositor: who,
+        totalBaseUnits: 0n,
+        total: "0.000000",
+        perDomain: [
+          { domain: 26, chain: "Arc Testnet", balance: "0" },
+          { domain: 0, chain: "Ethereum Sepolia", balance: world.gatewayBalance },
+        ],
+      }),
+      // Gateway's testnet answer for Sepolia -> Arc when this was written: a 1.1 USDC fee cap.
+      gatewayEstimate: async (spec) => ({ maxBlockHeight: 12_275_124n, maxFee: 1_100_000n, spec }),
+      gatewayTransfer: async (intent, signature) => {
+        world.gatewayTransfers.push({ intent, signature });
+        return { transferId: "transfer-1", attestation: "0xa77e", signature: "0x516e" };
+      },
+      relayGatewayMint: async (attestation, signature) => {
+        world.gatewayMints.push({ attestation, signature });
+        world.arcUsdc += world.gatewayTransfers.at(-1)!.intent.spec.value;
+        return "0x2222";
+      },
       mandateTerms: async () => world.terms,
       mandateRecord: async () => [],
       spentInWindow: async () => 0n,
@@ -114,7 +147,7 @@ const createWallet = async () => {
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "arc-router-demo-"));
   challenges = [];
-  world = { wallets: WALLETS, agent: AGENT, initialized: false, arcUsdc: 0n, terms: undefined, relayed: [], txHashes: [] };
+  world = { wallets: WALLETS, agent: AGENT, initialized: false, arcUsdc: 0n, terms: undefined, relayed: [], txHashes: [], gatewayBalance: "0", signRequests: [], gatewayTransfers: [], gatewayMints: [] };
   const api = createApi(deps());
   server = createServer((req, res) => void api(req, res, () => res.writeHead(418).end("passed through")));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -269,6 +302,126 @@ describe("1b: the customer sets the mandate", () => {
   });
 });
 
+describe("1c: an Arc-side action funded from the Gateway balance", () => {
+  // The customer signs with a real key here, so the server's signature check is exercised for real.
+  const customer = privateKeyToAccount(generatePrivateKey());
+  /** Signs exactly the document the server asked Circle to show the customer, as the Circle frame would. */
+  const signAsked = (account = customer) => {
+    const doc = JSON.parse(world.signRequests.at(-1)!.data);
+    const { EIP712Domain: _domain, ...types } = doc.types;
+    return account.signTypedData({ domain: doc.domain, types, primaryType: doc.primaryType, message: doc.message });
+  };
+  beforeEach(async () => {
+    world.wallets = [
+      { id: "w-sepolia", address: customer.address, blockchain: "ETH-SEPOLIA" },
+      { id: "w-arc", address: customer.address, blockchain: "ARC-TESTNET" },
+    ];
+    await createWallet();
+  });
+
+  it("prepares the allowance and the deposit into GatewayWallet from the customer's Sepolia wallet", async () => {
+    await call("POST", "/api/challenge", { action: "gateway-approve", amount: "5" });
+    await call("POST", "/api/challenge", { action: "gateway-deposit", amount: "5" });
+    expect(challenges.map((c) => [c.walletId, c.contractAddress])).toEqual([
+      ["w-sepolia", ETH_SEPOLIA.usdc],
+      ["w-sepolia", GATEWAY_TESTNET.gatewayWallet],
+    ]);
+    expect(decodeFunctionData({ abi: erc20Abi, data: challenges[0]!.callData }).args).toEqual([GATEWAY_TESTNET.gatewayWallet, 5_000_000n]);
+    const deposit = decodeFunctionData({ abi: gatewayWalletAbi, data: challenges[1]!.callData });
+    expect(deposit.functionName).toBe("deposit");
+    expect(deposit.args).toEqual([ETH_SEPOLIA.usdc, 5_000_000n]);
+  });
+
+  it("records the deposit once the customer has approved it", async () => {
+    await call("POST", "/api/challenge", { action: "gateway-deposit", amount: "5" });
+    world.txHashes = ["0xdddd"];
+    const done = await call("POST", "/api/complete", { action: "gateway-deposit", challengeId: "ch-1" });
+    expect(done.json.txHash).toBe("0xdddd");
+    expect(evidence().at(-1)).toMatchObject({ milestone: "M1(c)", chain: "Ethereum Sepolia", txHash: "0xdddd" });
+    expect((await call("GET", "/api/state")).json.gatewayFlow).toMatchObject({ depositAmount: "5.000000", depositTxHash: "0xdddd" });
+  });
+
+  it("will not ask for a signature until the deposit covers the transfer and the fee cap", async () => {
+    world.gatewayBalance = "3.099999";
+    const res = await call("POST", "/api/challenge", { action: "gateway-sign", value: "2" });
+    expect(res.status).toBe(409);
+    expect(res.json.error).toMatch(/balance on Ethereum Sepolia is 3\.099999 USDC.*needs up to 3\.100000.*13 to 19 minutes/);
+    expect(world.signRequests).toHaveLength(0);
+  });
+
+  it("asks the customer to sign a burn intent that can only mint to their own wallet on Arc", async () => {
+    world.gatewayBalance = "5";
+    const res = await call("POST", "/api/challenge", { action: "gateway-sign", value: "2" });
+    expect(res.json).toEqual({ challengeId: "sign-1" });
+    const asked = world.signRequests[0]!;
+    expect(asked.walletId).toBe("w-sepolia");
+    expect(asked.memo).toBe("Move 2.000000 USDC from your Gateway balance to your wallet on Arc Testnet");
+    const doc = JSON.parse(asked.data);
+    expect(doc.primaryType).toBe("BurnIntent");
+    expect(doc.domain).toEqual({ name: "GatewayWallet", version: "1" });
+    expect(doc.message).toMatchObject({ maxFee: "1100000", maxBlockHeight: "12275124" });
+    const spec = doc.message.spec;
+    expect(spec).toMatchObject({ version: 1, sourceDomain: 0, destinationDomain: 26, value: "2000000", hookData: "0x" });
+    for (const field of ["sourceDepositor", "sourceSigner", "destinationRecipient"]) expect(bytes32ToAddress(spec[field])).toBe(customer.address.toLowerCase());
+    expect(bytes32ToAddress(spec.sourceContract)).toBe(GATEWAY_TESTNET.gatewayWallet.toLowerCase());
+    expect(bytes32ToAddress(spec.destinationContract)).toBe(GATEWAY_TESTNET.gatewayMinter.toLowerCase());
+    expect(bytes32ToAddress(spec.sourceToken)).toBe(ETH_SEPOLIA.usdc.toLowerCase());
+    expect(bytes32ToAddress(spec.destinationToken)).toBe(ARC_TESTNET.usdc.toLowerCase());
+  });
+
+  it("uses a fresh salt for every intent", async () => {
+    world.gatewayBalance = "5";
+    await call("POST", "/api/challenge", { action: "gateway-sign" });
+    await call("POST", "/api/challenge", { action: "gateway-sign" });
+    const salts = world.signRequests.map((r) => JSON.parse(r.data).message.spec.salt);
+    expect(salts[0]).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(salts[0]).not.toBe(salts[1]);
+  });
+
+  it("after the customer signs: Gateway attests, the relayer mints on Arc, and the hash is recorded", async () => {
+    world.gatewayBalance = "5";
+    await call("POST", "/api/challenge", { action: "gateway-sign", value: "2" });
+    const signature = await signAsked();
+    const done = await call("POST", "/api/complete", { action: "gateway-sign", challengeId: "sign-1", signature });
+    expect(done.status).toBe(200);
+    expect(done.json).toMatchObject({ mintTxHash: "0x2222", transferId: "transfer-1" });
+    // Gateway received the intent the customer signed, and the relayer minted with Gateway's attestation.
+    expect(world.gatewayTransfers).toHaveLength(1);
+    expect(world.gatewayTransfers[0]!.signature).toBe(signature);
+    expect(world.gatewayTransfers[0]!.intent.spec.value).toBe(2_000_000n);
+    expect(world.gatewayMints).toEqual([{ attestation: "0xa77e", signature: "0x516e" }]);
+    const last = evidence().at(-1)!;
+    expect(last).toMatchObject({ milestone: "M1(c)", chain: "Arc Testnet", txHash: "0x2222" });
+    expect(last.proves).toMatch(/balance 0\.000000 -> 2\.000000/);
+    const flow = (await call("GET", "/api/state")).json.gatewayFlow;
+    expect(flow).toMatchObject({ mintTxHash: "0x2222", transferId: "transfer-1" });
+    expect(flow.pendingIntent).toBeUndefined();
+  });
+
+  it("refuses a signature from any key but the customer's, and sends nothing to Gateway", async () => {
+    world.gatewayBalance = "5";
+    await call("POST", "/api/challenge", { action: "gateway-sign", value: "2" });
+    const forged = await signAsked(privateKeyToAccount(generatePrivateKey()));
+    const res = await call("POST", "/api/complete", { action: "gateway-sign", challengeId: "sign-1", signature: forged });
+    expect(res.status).toBe(400);
+    expect(res.json.error).toMatch(/not the customer's wallet/);
+    expect(world.gatewayTransfers).toHaveLength(0);
+    expect(world.gatewayMints).toHaveLength(0);
+  });
+
+  it("refuses a missing signature, a replay, and a signature with nothing pending", async () => {
+    expect((await call("POST", "/api/complete", { action: "gateway-sign", challengeId: "x", signature: `0x${"11".repeat(65)}` })).status).toBe(409);
+    world.gatewayBalance = "5";
+    await call("POST", "/api/challenge", { action: "gateway-sign", value: "2" });
+    expect((await call("POST", "/api/complete", { action: "gateway-sign", challengeId: "sign-1" })).status).toBe(400);
+    const signature = await signAsked();
+    expect((await call("POST", "/api/complete", { action: "gateway-sign", challengeId: "sign-1", signature })).status).toBe(200);
+    // The same signature again: the intent is no longer pending, so nothing is sent twice.
+    expect((await call("POST", "/api/complete", { action: "gateway-sign", challengeId: "sign-1", signature })).status).toBe(409);
+    expect(world.gatewayTransfers).toHaveLength(1);
+  });
+});
+
 describe("overview and errors", () => {
   it("reports an empty state before anything exists", async () => {
     const { json } = await call("GET", "/api/state");
@@ -294,7 +447,8 @@ describe("overview and errors", () => {
 
   it("has no route that signs: every customer action ends in a challenge", async () => {
     await createWallet();
-    for (const action of ["cctp-approve", "cctp-burn", "mandate-approve-usdc", "mandate-set"]) {
+    world.gatewayBalance = "5";
+    for (const action of ["cctp-approve", "cctp-burn", "mandate-approve-usdc", "mandate-set", "gateway-approve", "gateway-deposit", "gateway-sign"]) {
       const { json } = await call("POST", "/api/challenge", { action, amount: "1" });
       expect(Object.keys(json)).toEqual(["challengeId"]);
     }

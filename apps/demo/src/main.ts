@@ -16,6 +16,7 @@ interface State {
   cctp: { amount: string; burnTxHash?: string; mintTxHash?: string; attestationSeconds?: number; totalSeconds?: number } | null;
   balances?: { sourceUsdc: string; sourceGasWei: string; arcUsdc: string };
   gateway?: { total: string; perDomain: { chain: string; domain: number; balance: string }[] };
+  gatewayFlow: { depositAmount?: string; depositTxHash?: string; value?: string; feeCap?: string; transferId?: string; mintTxHash?: string } | null;
   mandate?: { agent: string; mode: string; revoked: boolean; version: string; perOrderCap: string; dailyCap: string; spentInWindow: string; expiry: string } | null;
   record?: { kind: string; proposalId?: string; actor?: string; recipient?: string; amount?: string; reason?: string; mandateVersion: string; txHash: string; url: string }[];
 }
@@ -37,15 +38,19 @@ async function api<T>(method: "GET" | "POST", path: string, body?: unknown): Pro
   return json as T;
 }
 
-/** Hands a challenge to Circle's frame and resolves once the customer has approved it with their PIN. */
-async function approveInCircleFrame(challengeId: string): Promise<void> {
+/**
+ * Hands a challenge to Circle's frame and resolves once the customer has approved it with their
+ * PIN. For a signing challenge it resolves with the signature Circle's frame returns.
+ */
+async function approveInCircleFrame(challengeId: string): Promise<string | undefined> {
   const session = await api<{ appId: string; userToken: string; encryptionKey: string }>("POST", "/api/session");
   sdk.setAppSettings({ appId: session.appId });
   sdk.setAuthentication({ userToken: session.userToken, encryptionKey: session.encryptionKey });
-  await new Promise<void>((resolve, reject) => {
-    sdk.execute(challengeId, (error) => {
+  return new Promise<string | undefined>((resolve, reject) => {
+    sdk.execute(challengeId, (error, result) => {
       if (error) reject(new Error(error.message ?? "The challenge was not approved."));
-      else resolve();
+      // SignMessageResult (the SDK's type for SIGN_TYPEDDATA) carries data.signature; other challenges carry none.
+      else resolve((result as { data?: { signature?: string } } | undefined)?.data?.signature);
     });
   });
 }
@@ -71,10 +76,14 @@ async function customerAction(card: string, action: string, body: Record<string,
     const { challengeId } = await api<{ challengeId: string }>("POST", "/api/challenge", { action, ...body });
     status[card] = { text: "Enter your PIN in the Circle window…" };
     render();
-    await approveInCircleFrame(challengeId);
-    status[card] = { text: action === "cctp-burn" ? "Burn sent. Waiting for Circle's attestation, then minting on Arc…" : "Approved. Waiting for the transaction to confirm…" };
+    const signature = await approveInCircleFrame(challengeId);
+    const waiting: Record<string, string> = {
+      "cctp-burn": "Burn sent. Waiting for Circle's attestation, then minting on Arc…",
+      "gateway-sign": "Signed. Gateway is attesting, then minting on Arc…",
+    };
+    status[card] = { text: waiting[action] ?? "Approved. Waiting for the transaction to confirm…" };
     render();
-    return done(await api<Record<string, string>>("POST", "/api/complete", { action, challengeId }));
+    return done(await api<Record<string, string>>("POST", "/api/complete", { action, challengeId, signature }));
   });
 }
 
@@ -205,13 +214,33 @@ function render() {
   );
 
   // 3. Gateway
+  const g = s.gatewayFlow;
+  const gatewayOnSource = Number(s.gateway?.perDomain.find((d) => d.chain === s.source)?.balance ?? 0);
   const gatewayCard = card(
     "gateway",
     "3. Unified balance",
-    "Circle Gateway: one USDC balance across chains, read by the router.",
-    { locked: !hasWallet },
+    `Circle Gateway: one USDC balance across chains, read by the router. Deposit on ${s.source}, then fund your wallet on ${s.destination} from it with one signature and no transaction of your own.`,
+    { done: !!g?.mintTxHash, locked: !hasWallet },
     ...(s.gateway
       ? [defs([...s.gateway.perDomain.map((d): [string, string] => [d.chain, `${d.balance} USDC`]), ["Total in Gateway", `${s.gateway.total} USDC`]])]
+      : []),
+    el("div", { class: "row" },
+      button("1. Allow Gateway", () =>
+        customerAction("gateway", "gateway-approve", { amount: "5" }, (r) => `Allowance set (${short(r.txHash!)}). Now deposit.`),
+        { disabled: !funded, secondary: true }),
+      button("2. Deposit 5 USDC", () =>
+        customerAction("gateway", "gateway-deposit", { amount: "5" }, (r) => `Deposited (${short(r.txHash!)}). It joins your balance once final on ${s.source}, about 13 to 19 minutes.`),
+        { disabled: !funded, secondary: true }),
+      button(`3. Fund ${s.destination} with 2 USDC`, () =>
+        customerAction("gateway", "gateway-sign", { value: "2" }, (r) => `Arrived on Arc in ${r.seconds} s.`),
+        { disabled: !hasWallet || gatewayOnSource <= 0 }),
+    ),
+    ...(g?.depositTxHash || g?.mintTxHash
+      ? [defs([
+          ...(g.depositTxHash ? ([["Deposit", link(short(g.depositTxHash), `https://sepolia.etherscan.io/tx/${g.depositTxHash}`)]] as [string, Node | string][]) : []),
+          ...(g.depositTxHash && gatewayOnSource <= 0 && !g.mintTxHash ? ([["Status", `Waiting for the deposit to be final on ${s.source}…`]] as [string, Node | string][]) : []),
+          ...(g.mintTxHash ? ([["Mint on Arc", link(short(g.mintTxHash), `https://explorer.testnet.arc.io/tx/${g.mintTxHash}`)]] as [string, Node | string][]) : []),
+        ])]
       : []),
   );
 
@@ -280,5 +309,9 @@ void refresh();
 setInterval(() => {
   const b = state?.balances;
   const waitingForFunds = !!state?.wallets?.source && !state.cctp?.burnTxHash && !(Number(b?.sourceUsdc ?? 0) > 0 && BigInt(b?.sourceGasWei ?? "0") > 0n);
-  if (waitingForFunds && !busy && document.visibilityState === "visible") void refresh();
+  // Likewise while a Gateway deposit waits to become final on the source chain.
+  const g = state?.gatewayFlow;
+  const sourceName = state?.source;
+  const waitingForDeposit = !!g?.depositTxHash && !g.mintTxHash && !(Number(state?.gateway?.perDomain.find((d) => d.chain === sourceName)?.balance ?? 0) > 0);
+  if ((waitingForFunds || waitingForDeposit) && !busy && document.visibilityState === "visible") void refresh();
 }, 8000);

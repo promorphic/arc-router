@@ -155,6 +155,19 @@ export class CircleWalletsClient {
     });
   }
 
+  /**
+   * Challenge that asks the customer to sign EIP-712 typed data with their PIN. `data` is the
+   * whole typed-data document as a JSON string. The signature comes back to the page from the
+   * SDK frame; this server never sees a key.
+   * https://developers.circle.com/api-reference/wallets/user-controlled-wallets/sign-user-typed-data
+   */
+  async createSignTypedDataChallenge(userToken: string, req: { walletId: string; data: string; memo?: string }): Promise<{ challengeId: string }> {
+    return this.call("POST", "/v1/w3s/user/sign/typedData", {
+      userToken,
+      body: { walletId: req.walletId, data: req.data, ...(req.memo ? { memo: req.memo } : {}) },
+    });
+  }
+
   async getChallenge(userToken: string, challengeId: string): Promise<CircleChallenge> {
     const data = await this.call<{ challenge: CircleChallenge }>("GET", `/v1/w3s/user/challenges/${challengeId}`, { userToken });
     return data.challenge;
