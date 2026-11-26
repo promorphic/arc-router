@@ -1,0 +1,14 @@
+{
+  "name": "@promorphic/router",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Settlement and routing service: the USDC leg on Arc (CCTP V2, Gateway).",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "viem": "^2.58.7"
+  }
+}
