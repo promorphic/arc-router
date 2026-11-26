@@ -275,3 +275,10 @@ function render() {
 }
 
 void refresh();
+
+// While the wallet waits for faucet funds, poll so the transfer buttons unlock without a reload.
+setInterval(() => {
+  const b = state?.balances;
+  const waitingForFunds = !!state?.wallets?.source && !state.cctp?.burnTxHash && !(Number(b?.sourceUsdc ?? 0) > 0 && BigInt(b?.sourceGasWei ?? "0") > 0n);
+  if (waitingForFunds && !busy && document.visibilityState === "visible") void refresh();
+}, 8000);
