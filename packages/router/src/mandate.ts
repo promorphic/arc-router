@@ -160,11 +160,11 @@ export interface RecordEntry {
  */
 export async function readRecord(
   customer: Address,
-  opts: { client?: PublicClient; mandate?: Address; fromBlock?: bigint } = {},
+  opts: { client?: PublicClient; mandate?: Address; fromBlock?: bigint; toBlock?: bigint } = {},
 ): Promise<RecordEntry[]> {
   const client = opts.client ?? arcClient();
   const address = opts.mandate ?? MANDATE_ARC_TESTNET.address;
-  const head = await client.getBlockNumber();
+  const head = opts.toBlock ?? (await client.getBlockNumber());
   const logs = [];
   for (let from = opts.fromBlock ?? MANDATE_ARC_TESTNET.deployBlock; from <= head; from += LOG_WINDOW) {
     const to = from + LOG_WINDOW - 1n < head ? from + LOG_WINDOW - 1n : head;

@@ -13,6 +13,14 @@ Dated notes on where Circle, Arc or Dinari behave differently from their documen
 - Policies are set through the Circle CLI (`circle wallet limit set`, CLI 1.4.0 or later). We found no public REST endpoint or JSON schema for policies, and no documented error shape for an out-of-policy request; we will record the actual response when we first see one.
 - A transfer limit needs all four caps (`--per-tx`, `--daily`, `--weekly`, `--monthly`) with per-tx ≤ daily ≤ weekly ≤ monthly. Windows are rolling; there is no absolute expiry, so the mandate's expiry lives in the Mandate contract only.
 
+### First CCTP V2 Fast Transfer, Ethereum Sepolia to Arc testnet
+
+- 5 USDC, `minFinalityThreshold` 1000. The fee charged was 0.000125 USDC (0.25 bps), so 4.999875 USDC was minted.
+- Circle's attestation was ready 14.8 s after the burn confirmed. From the customer's PIN approval to the mint on Arc took 59 s; most of that was the Sepolia transaction confirming and Circle's wallet API reporting it.
+- The mint (`MessageTransmitterV2.receiveMessage`) can be submitted by anyone. We submit it from a test wallet that only pays gas, so the customer needs no gas on Arc before their first USDC arrives.
+- A Circle user-controlled wallet is an EOA with the same address on Ethereum Sepolia and Arc testnet. On Arc it pays its own gas in USDC: the allowance and `setMandate` transactions together cost about 0.0056 USDC.
+- The PIN frame (`pw-auth.circle.com`) takes 10 to 15 seconds to appear after `sdk.execute`. Until then the page shows nothing but our own status line.
+
 ### Agent Wallet on Arc testnet is a smart account with sponsored gas
 
 - `circle wallet list` showed the wallet's address before it had any code. After its first `circle wallet execute` the address holds a proxy contract: the wallet is a smart account, deployed on first use.

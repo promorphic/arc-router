@@ -7,7 +7,7 @@
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, parseEventLogs } from "viem";
 import { describe, expect, it } from "vitest";
 import { findOutcome, listArgs, parseAgentWallet, circleCli } from "@promorphic/agent";
 import {
@@ -18,6 +18,7 @@ import {
   CIRCLE_API_URL,
   ETH_SEPOLIA,
   MANDATE_ARC_TESTNET,
+  erc20Abi,
   fetchFee,
   mandateAbi,
   maxFeeFor,
@@ -118,6 +119,39 @@ describe.skipIf(!enabled)("live testnet (read-only)", () => {
     // ERC-4337 EntryPoint v0.7. The transaction's sender is a bundler; the Mandate contract saw the Agent Wallet as caller.
     expect(receipt.to?.toLowerCase()).toBe("0x0000000071727de22e5e9d8baf0edac6f37da032");
     expect(receipt.from.toLowerCase()).not.toBe(M1B.agentWallet);
+  });
+
+  // The M1(a) and M1(b) run of 26 Nov 2026 with the customer's Circle user-controlled wallet, re-read from the chains.
+  const CUSTOMER = "0xdc2fefe9fa4b011eec12811c547e702b50781c04";
+
+  it("CCTP: the recorded burn on Sepolia came from the customer's wallet and the mint on Arc paid the same wallet", async () => {
+    const sepolia = createPublicClient({ transport: transportFor(ETH_SEPOLIA) });
+    const burn = await sepolia.getTransactionReceipt({ hash: "0x5c841f0cdfb2706c4b18282560c4e34bd87f9d5d48d0ed9618f909620ef88718" });
+    expect(burn.status).toBe("success");
+    expect(burn.from.toLowerCase()).toBe(CUSTOMER);
+    expect(burn.to?.toLowerCase()).toBe(CCTP_V2_TESTNET.tokenMessengerV2.toLowerCase());
+
+    const mint = await arc.getTransactionReceipt({ hash: "0xbe422779508bcf8b2dd62f96060ad63764c737407c1565394e6c0845de931b99" });
+    expect(mint.status).toBe("success");
+    expect(mint.to?.toLowerCase()).toBe(CCTP_V2_TESTNET.messageTransmitterV2.toLowerCase());
+    // The customer did not send the mint: a relayer paid the gas.
+    expect(mint.from.toLowerCase()).not.toBe(CUSTOMER);
+    const transfers = parseEventLogs({ abi: erc20Abi, logs: mint.logs, eventName: "Transfer" }).filter((t) => t.address.toLowerCase() === ARC_TESTNET.usdc.toLowerCase());
+    const received = transfers.filter((t) => t.args.to.toLowerCase() === CUSTOMER).reduce((sum, t) => sum + t.args.value, 0n);
+    expect(received).toBe(4_999_875n);
+  });
+
+  it("Mandate: the customer's Circle wallet set the mandate and the Agent Wallet's proposals were decided under it", async () => {
+    const record = await readRecord(CUSTOMER, { fromBlock: 74231300n, toBlock: 74231500n });
+    expect(record.map((r) => [r.kind, r.reason ?? ""])).toEqual([
+      ["MandateSet", ""],
+      ["ProposalExecuted", ""],
+      ["ProposalRejected", "OverPerOrderCap"],
+      ["ProposalRejected", "RecipientNotAllowed"],
+    ]);
+    expect(record[0]!.actor?.toLowerCase()).toBe(CUSTOMER);
+    for (const r of record.slice(1)) expect(r.actor?.toLowerCase()).toBe(M1B.agentWallet);
+    expect(record[1]!.txHash).toBe("0xd96be9a5fcec46ef8640fa96d04a3065651bf0178700b3aa96aa5a4c2d411447");
   });
 
   it.skipIf(process.env.RUN_CIRCLE_CLI !== "1")("Agent Wallet: the Circle CLI session lists the wallet on Arc testnet", async () => {

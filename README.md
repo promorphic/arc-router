@@ -11,8 +11,12 @@ Promorphic is agentic, cross-chain trading and portfolio management for tokenize
 Read this first. It is kept current with every push, and nothing below it should contradict it.
 
 - **Live (mainnet):** nothing. No mainnet transaction has been sent from this repository.
-- **Testnet, proven with hashes:** the Mandate contract is deployed on Arc testnet ([`0x2D1CBBEea337a30dF22C0446dB2528B98B543D10`](https://explorer.testnet.arc.io/address/0x2D1CBBEea337a30dF22C0446dB2528B98B543D10)). A live end-to-end run with test keys shows an in-limit payment executing and over-cap, wrong-recipient, over-daily-cap, unapproved and post-revoke proposals each being rejected on-chain. A Circle Agent Wallet on Arc testnet has submitted proposals through the contract: one inside the limits executed, one over the cap and one to a recipient outside the allowlist were rejected, each with a hash. In that run the customer was a test wallet holding faucet funds, not yet a Circle user-controlled wallet. The audit record exports are in [`evidence/`](evidence/).
-- **Testnet, working but not yet run end to end:** the CCTP V2 transfer into a Circle user-controlled wallet, and that wallet (rather than a test wallet) setting the mandate. The demo app, the server flow and Circle's testnet API calls are built and tested; the run needs the customer to set a PIN. The Gateway unified-balance read works against Circle's testnet API.
+- **Testnet, proven with hashes:**
+  - A CCTP V2 Fast Transfer moved 5 USDC from Ethereum Sepolia to Arc testnet, from and to a Circle user-controlled wallet, signed with the customer's PIN; 59 seconds from approval to mint.
+  - The Mandate contract is deployed on Arc testnet ([`0x2D1CBBEea337a30dF22C0446dB2528B98B543D10`](https://explorer.testnet.arc.io/address/0x2D1CBBEea337a30dF22C0446dB2528B98B543D10)). That Circle wallet set a mandate naming a Circle Agent Wallet, and the Agent Wallet's proposals were executed inside the limits and rejected outside them (over the cap, recipient not allowlisted).
+  - A live end-to-end run with test keys also shows over-daily-cap, unapproved (Copilot) and post-revoke proposals being rejected on-chain.
+  - Hashes are in [MILESTONES.md](MILESTONES.md); audit record exports are in [`evidence/`](evidence/).
+- **Testnet, partly working:** the Gateway unified-balance read works against Circle's testnet API. Nothing has been deposited into Gateway and no Arc-side action has been funded from it.
 - **Checked:** every hardcoded chain fact (chain ids, CCTP V2 domains and contracts, Gateway contracts, USYC contracts) against the live testnets by `pnpm verify:chains`, 35 of 35 on 26 Nov 2026.
 - **Planned:** milestones M1 to M4 below. Evidence for each (transaction hash, explorer link, date, what it proves) is logged in [MILESTONES.md](MILESTONES.md) as it is produced.
 
